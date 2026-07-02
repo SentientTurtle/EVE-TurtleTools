@@ -129,7 +129,7 @@ impl IconOverlay {
     pub fn load<C: SharedCache>(self, cache: &C) -> Result<Option<(&str, DynamicImage)>, IconError> {
         match self {
             IconOverlay::None => Ok(None),
-            IconOverlay::Resource(res) => Ok(Some((res.rsplit_once('/').map(|(_, suffix)| suffix).expect("resources are hardcoded and always have a filename"), ImageReader::open(cache.path_of(res)?)?.with_guessed_format()?.decode()?.resize_exact(16, 16, FilterType::Lanczos3)))),
+            IconOverlay::Resource(res) => Ok(Some((cache.hash_of(res)?, ImageReader::open(cache.path_of(res)?)?.with_guessed_format()?.decode()?.resize_exact(16, 16, FilterType::Lanczos3)))),
             IconOverlay::Bytes(bytes, name) => {
                 let mut reader = ImageReader::new(Cursor::new(bytes));
                 reader.set_format(ImageFormat::Png);
@@ -177,15 +177,26 @@ pub fn get_techoverlay(metagroup_id: u32, use_old_style: bool) -> IconOverlay {
     }
 }
 
-pub fn get_moduleoverlay(module_slot: Option<ModuleSlot>, _use_old_style: bool) -> IconOverlay {
-    // Module overlays currently have no new style, so always use the old style
-    match module_slot {
-        None => IconOverlay::None,
-        Some(ModuleSlot::High) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-High.png"), "slot-hi-old"),
-        Some(ModuleSlot::Medium) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Med.png"), "slot-me-old"),
-        Some(ModuleSlot::Low) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Low.png"), "slot-lo-old"),
-        Some(ModuleSlot::Rig) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Rig.png"), "slot-ri-old"),
-        Some(ModuleSlot::Subsystem) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Subsystem.png"), "slot-su-old")
+pub fn get_moduleoverlay(module_slot: Option<ModuleSlot>, use_old_style: bool) -> IconOverlay {
+    // Currently makes no difference, but handles future changes
+    if use_old_style {
+        match module_slot {
+            None => IconOverlay::None,
+            Some(ModuleSlot::High) => IconOverlay::Resource("res:/ui/texture/icons/38_16_123.png"),
+            Some(ModuleSlot::Medium) => IconOverlay::Resource("res:/ui/texture/icons/38_16_122.png"),
+            Some(ModuleSlot::Low) => IconOverlay::Resource("res:/ui/texture/icons/38_16_121.png"),
+            Some(ModuleSlot::Rig) => IconOverlay::Resource("res:/ui/texture/icons/38_16_124.png"),
+            Some(ModuleSlot::Subsystem) => IconOverlay::Resource("res:/ui/texture/icons/38_16_42.png")
+        }
+    } else {
+        match module_slot {
+            None => IconOverlay::None,
+            Some(ModuleSlot::High) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-High.png"), "slot-high-old"),
+            Some(ModuleSlot::Medium) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Med.png"), "slot-med-old"),
+            Some(ModuleSlot::Low) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Low.png"), "slot-low-old"),
+            Some(ModuleSlot::Rig) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Rig.png"), "slot-rig-old"),
+            Some(ModuleSlot::Subsystem) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Subsystem.png"), "slot-subsystem-old")
+        }
     }
 }
 
