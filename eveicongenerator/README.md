@@ -1,4 +1,4 @@
-# Icon "Export Collection"
+## Icon "Export Collection"
 
 Simple icon-dump with files for each item-type, suitable for direct web hosting. Contains duplicate files.
 
@@ -25,7 +25,7 @@ Notes:
 * Relics/Reactions do not have a 'blueprint copy' icon
 </details>
 
-# Icon "Service bundle"
+## Icon "Service bundle"
 
 De-duplicated set of icons and metadata for using them.
 
@@ -79,13 +79,18 @@ For full compatibility with the Fenris Creations' official Image Service the non
 * `/corporations/`
 </details>
 
-# Styles
+## Styles
 
 * No-suffix files ("Image Export Collection.zip", "Service Bundle.zip") contain standard game-accurate icons.  
 * "Old Style" suffixed files contain icons with the old "glossy" style overlays for tech-tier.  
 * "Bonus Style" suffixed files contain icons with additional alpha/omega & module slot overlays.
 
-# Ship Tree Export
+## Ship Tree Export
 
 Side-on Ship renders as displayed in the game's Ship Tree. Provided as semi-transparent PNG files ready for direct use or compositing.
 Files are provided in format `[TYPE_ID].png`, only for player-flyable ships.
+
+# Changes
+
+## Versions after `3484357`:
+* Ship Tree Export now uses 'Grayscale with Alpha Channel' PNG encoding to reduce file sizes. This encoding yields identical image data as before. If you encounter errors, open an issue.
