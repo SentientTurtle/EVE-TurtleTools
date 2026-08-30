@@ -18,6 +18,7 @@ use std::marker::PhantomData;
 use util::units::EVEUnit;
 use zip::ZipArchive;
 use zip::result::ZipError;
+use crate::types::ids::MissionID;
 
 /// Error indicating failure to load SDE
 #[derive(Debug)]
@@ -140,7 +141,7 @@ macro_rules! impl_map_collect {
 }
 
 // Generic types
-/// Helper type for JSON maps that are encoded as arrays of object entries
+/// Helper type for JSON maps that are encoded as arrays of objects
 #[derive(Deserialize)]
 struct ExplicitMapEntry<K, V> {
     _key: K,
@@ -260,24 +261,17 @@ impl LocalizedString {
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
-#[cfg_attr(feature="docs_export", doc_sde(sde_file="agentsInSpace"))]
-pub struct AgentInSpace {
-    /// CharacterID for this agent
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="accountingEntryTypes"))]
+pub struct AccountingEntryType {
     #[serde(rename="_key")]
-    pub agentID: ids::CharacterID,
-    /// 'Dungeon' within which the agent is located
-    ///
-    /// Data about dungeons is not available for EVE 3rd party developers
-    pub dungeonID: ids::DungeonID,
-    /// SolarSystem in which the Agent is located
-    pub solarSystemID: ids::SolarSystemID,
-    /// Spawnpoint for agent, no data available for EVE 3rd party developers
-    pub spawnPointID: ids::SpawnPointID,
-    /// TypeID of the agent's ship (Note: Agent Ships are not the same as the player-flyable ships, and have different TypeIDs)
-    pub typeID: ids::TypeID
+    pub accountingEntryTypeID: ids::AccountingEntryTypeID,
+    pub internalName: String,
+    pub name: LocalizedString,
+    pub description: Option<LocalizedString>,
+    pub journalMessage: Option<LocalizedString>
 }
 
-impl_map_collect!(ids::CharacterID, AgentInSpace, agentID);
+impl_map_collect!(ids::AccountingEntryTypeID, AccountingEntryType, accountingEntryTypeID);
 
 /// The different kinds of agent
 ///
@@ -336,6 +330,31 @@ struct AgentTypeEntry {
     name: AgentType
 }
 
+/// Agent (Mission NPC) that is located in space, rather than docked in a station
+///
+/// Additional Agent information is contained in [`NpcCharacter`] data
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="agentsInSpace"))]
+pub struct AgentInSpace {
+    /// CharacterID for this agent
+    #[serde(rename="_key")]
+    pub agentID: ids::CharacterID,
+    /// 'Dungeon' within which the agent is located
+    ///
+    /// Data about dungeons is not available for EVE 3rd party developers
+    pub dungeonID: ids::DungeonID,
+    /// SolarSystem in which the Agent is located
+    pub solarSystemID: ids::SolarSystemID,
+    /// Spawnpoint for agent, no data available for EVE 3rd party developers
+    pub spawnPointID: ids::SpawnPointID,
+    /// TypeID of the agent's ship (Note: Agent Ships are not the same as the player-flyable ships, and have different TypeIDs)
+    pub typeID: ids::TypeID
+}
+
+impl_map_collect!(ids::CharacterID, AgentInSpace, agentID);
+
 /// Character Ancestry; Now-unused character creation element (Removed from player character creation 2021-03-02)
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
@@ -368,6 +387,23 @@ pub struct Ancestry {
 }
 
 impl_map_collect!(ids::AncestryID, Ancestry, ancestryID);
+
+/// Effect applied when in proximity to an object
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="appliedProximityEffects"))]
+pub struct AppliedProximityEffect {
+    /// TypeID for the celestial object this effect is centered on
+    #[serde(rename="_key")]
+    pub objectTypeID: ids::TypeID,
+    #[serde(deserialize_with="deserialize_explicit_entry_map")]
+    pub dbuffs: IndexMap<ids::DynamicBuffID, f64>,
+    pub radius: f64,
+    pub delaySeconds: f64
+}
+
+impl_map_collect!(ids::TypeID, AppliedProximityEffect, objectTypeID);
 
 /// Dungeon Archetype
 #[derive(Debug, Deserialize)]
@@ -692,7 +728,7 @@ pub struct CharacterAttribute {
 
 impl_map_collect!(ids::CharacterAttributeID, CharacterAttribute, characterAttributeID);
 
-/// Character skill training Attribute
+/// Character title, cosmetic text tag earned through achievements
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
@@ -898,61 +934,117 @@ pub struct CorporationActivity {
 
 impl_map_collect!(ids::CorporationActivityID, CorporationActivity, corporationActivityID);
 
-/// 'Warefare Buff'; Command Burst bonus effects
+
+/// Grouping of corporation permission roles
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="corporationRoleGroups"))]
+pub struct CorporationRoleGroup {
+    /// ID for this role group
+    #[serde(rename="_key")]
+    pub corporationRoleGroupID: ids::CorporationRoleGroupID,
+    pub name: LocalizedString,
+    pub appliesTo: CorporationRoleGroupAppliesTo,
+    pub appliesToGrantable: CorporationRoleGroupAppliesToGrantable,
+    pub isDivisional: bool,
+    pub isLocational: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_camel_case_types)]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub enum CorporationRoleGroupAppliesTo {
+    roles,
+    rolesAtHQ,
+    rolesAtBase,
+    rolesAtOther
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_camel_case_types)]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub enum CorporationRoleGroupAppliesToGrantable {
+    grantableRoles,
+    grantableRolesAtHQ,
+    grantableRolesAtBase,
+    grantableRolesAtOther
+}
+
+impl_map_collect!(ids::CorporationRoleGroupID, CorporationRoleGroup, corporationRoleGroupID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="corporationRoles"))]
+pub struct CorporationRole {
+    /// ID for this role
+    #[serde(rename="_key")]
+    pub corporationRoleID: ids::CorporationRoleID,
+    pub name: LocalizedString,
+    pub shortName: String,
+    pub description: LocalizedString,
+    #[serde(default)]
+    pub roleGroupIDs: Vec<ids::CorporationRoleGroupID>
+}
+
+impl_map_collect!(ids::CorporationRoleID, CorporationRole, corporationRoleID);
+
+/// 'Dynamic Buff'; e.g. Command Burst bonus effects
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
 #[cfg_attr(feature="docs_export", doc_sde(sde_file="dbuffCollections"))]
-pub struct WarfareBuff {
+pub struct DynamicBuff {
     /// ID for this warfare buff. Referenced by attributes on Command Burst charges
     #[serde(rename="_key")]
-    pub warfareBuffID: ids::WarfareBuffID,
+    pub DynamicBuffID: ids::DynamicBuffID,
     /// Aggregate mode for multiple buffs; Whether the maximum or minimum value is selected when multiple buffs of different strengths are applied to a ship
-    pub aggregateMode: WarfareBuffAggregateMode,
+    pub aggregateMode: DynamicBuffAggregateMode,
     /// Developer description, in English
     pub developerDescription: String,
     /// Display name, as shown in tooltip in-game
     pub displayName: Option<LocalizedString>,
     /// Attributes whose effects are applied as Item Modifiers
     #[serde(default)]
-    #[serde(deserialize_with="deserialize_warfarebuff_item_modifiers")]
+    #[serde(deserialize_with="deserialize_dynamicbuff_item_modifiers")]
     pub itemModifiers: Vec<ids::AttributeID>,
     /// Attributes whose effects are applied as Location Group Modifiers
     #[serde(default)]
-    pub locationGroupModifiers: Vec<WarfareBuffLocationGroupModifier>,
+    pub locationGroupModifiers: Vec<DynamicBuffLocationGroupModifier>,
     /// Attributes whose effects are applied as Location Modifiers
     #[serde(default)]
-    #[serde(deserialize_with="deserialize_warfarebuff_location_modifiers")]
+    #[serde(deserialize_with="deserialize_dynamicbuff_location_modifiers")]
     pub locationModifiers: Vec<ids::AttributeID>,
     /// Attributes whose effects are applied as Location with-required-skill Modifiers
     #[serde(default)]
-    pub locationRequiredSkillModifiers: Vec<WarfareBuffLocationRequiredSkillModifier>,
+    pub locationRequiredSkillModifiers: Vec<DynamicBuffLocationRequiredSkillModifier>,
     /// Operation applied by modifiers
-    pub operationName: WarfareBuffOperation,
+    pub operationName: DynamicBuffOperation,
     /// How the effect value is displayed in-game
-    pub showOutputValueInUI: WarfareBuffUIMode
+    pub showOutputValueInUI: DynamicBuffUIMode
 }
 
-fn deserialize_warfarebuff_item_modifiers<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<ids::AttributeID>, D::Error> {
+fn deserialize_dynamicbuff_item_modifiers<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<ids::AttributeID>, D::Error> {
     struct SeqVisitor;
     impl<'de> Visitor<'de> for SeqVisitor {
         type Value = Vec<ids::AttributeID>;
 
         fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-            formatter.write_str("array of warfarebuff item modifier attributes")
+            formatter.write_str("array of dynamicbuff item modifier attributes")
         }
 
         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
             #[derive(Debug, Deserialize)]
             #[allow(non_snake_case)]
             #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
-            struct WarfareBuffItemModifier {
+            struct DynamicBuffItemModifier {
                 pub dogmaAttributeID: ids::AttributeID
             }
 
             let size_hint = seq.size_hint();
             let mut vec = size_hint.map(Vec::with_capacity).unwrap_or_else(Vec::new);
-            while let Some(value) = seq.next_element::<WarfareBuffItemModifier>()? {
+            while let Some(value) = seq.next_element::<DynamicBuffItemModifier>()? {
                 vec.push(value.dogmaAttributeID)
             }
             Ok(vec)
@@ -962,26 +1054,26 @@ fn deserialize_warfarebuff_item_modifiers<'de, D: Deserializer<'de>>(deserialize
     deserializer.deserialize_seq(SeqVisitor)
 }
 
-fn deserialize_warfarebuff_location_modifiers<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<ids::AttributeID>, D::Error> {
+fn deserialize_dynamicbuff_location_modifiers<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<ids::AttributeID>, D::Error> {
     struct SeqVisitor;
     impl<'de> Visitor<'de> for SeqVisitor {
         type Value = Vec<ids::AttributeID>;
 
         fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-            formatter.write_str("array of warfarebuff location modifier attributes")
+            formatter.write_str("array of dynamicBuff location modifier attributes")
         }
 
         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
             #[derive(Debug, Deserialize)]
             #[allow(non_snake_case)]
             #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
-            struct WarfareBuffLocationModifier {
+            struct DynamicBuffLocationModifier {
                 dogmaAttributeID: ids::AttributeID
             }
 
             let size_hint = seq.size_hint();
             let mut vec = size_hint.map(Vec::with_capacity).unwrap_or_else(Vec::new);
-            while let Some(value) = seq.next_element::<WarfareBuffLocationModifier>()? {
+            while let Some(value) = seq.next_element::<DynamicBuffLocationModifier>()? {
                 vec.push(value.dogmaAttributeID)
             }
             Ok(vec)
@@ -996,7 +1088,7 @@ fn deserialize_warfarebuff_location_modifiers<'de, D: Deserializer<'de>>(deseria
 #[allow(non_snake_case)]
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
 #[cfg_attr(feature="docs_export", doc_sde(internal_type))]
-pub enum WarfareBuffAggregateMode {
+pub enum DynamicBuffAggregateMode {
     /// If multiple buffs stack, the maximum value is selected
     Maximum,
     /// If multiple buffs stack, the minimum value is selected
@@ -1010,7 +1102,7 @@ pub enum WarfareBuffAggregateMode {
 #[allow(non_snake_case)]
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
 #[cfg_attr(feature="docs_export", doc_sde(internal_type))]
-pub enum WarfareBuffOperation {
+pub enum DynamicBuffOperation {
     // Dogma is weird and complicated, so no individual docs on these
     PostMul, PostPercent, ModAdd, PreAssignment, PostAssignment
 }
@@ -1020,7 +1112,7 @@ pub enum WarfareBuffOperation {
 #[allow(non_snake_case)]
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
 #[cfg_attr(feature="docs_export", doc_sde(internal_type))]
-pub enum WarfareBuffUIMode {
+pub enum DynamicBuffUIMode {
     /// Buff amount is not shown
     Hide,
     /// Buff amount is shown as-is, e.g. `10 -> "10%", -10 -> "-10%"`
@@ -1034,7 +1126,7 @@ pub enum WarfareBuffUIMode {
 #[allow(non_snake_case)]
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
 #[cfg_attr(feature="docs_export", doc_sde(internal_type))]
-pub struct WarfareBuffLocationGroupModifier {
+pub struct DynamicBuffLocationGroupModifier {
     /// Attribute source for effect
     pub dogmaAttributeID: ids::AttributeID,
     /// Applicable group
@@ -1046,14 +1138,14 @@ pub struct WarfareBuffLocationGroupModifier {
 #[allow(non_snake_case)]
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
 #[cfg_attr(feature="docs_export", doc_sde(internal_type))]
-pub struct WarfareBuffLocationRequiredSkillModifier {
+pub struct DynamicBuffLocationRequiredSkillModifier {
     /// Attribute source for effect
     pub dogmaAttributeID: ids::AttributeID,
     /// Skill required by applicable types
     pub skillID: ids::TypeID
 }
 
-impl_map_collect!(ids::WarfareBuffID, WarfareBuff, warfareBuffID);
+impl_map_collect!(ids::DynamicBuffID, DynamicBuff, DynamicBuffID);
 
 
 /// Attribute Category, grouping of [`Attribute`]
@@ -1334,6 +1426,7 @@ pub struct EpicArc {
     /// Name (Note: Players often refer to the epic arcs by their faction)
     pub name: LocalizedString,
     /// Mission chain in this arc
+    #[serde(deserialize_with="deserialize_inline_entry_map")]
     pub missions: IndexMap<ids::MissionID, EpicArcMission>
 }
 
@@ -1357,6 +1450,63 @@ pub struct EpicArcMission {
     /// Players may select one mission out of these options to continue with
     #[serde(default)]
     pub nextMissions: Vec<ids::MissionID>
+}
+
+impl InlineEntry<ids::MissionID> for EpicArcMission {
+    fn key(&self) -> MissionID {
+        self.missionID
+    }
+}
+
+/// Temporary skill unlock package
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="expertSystems"))]
+pub struct ExpertSystem {
+    /// Expert System inventory type
+    #[serde(rename="_key")]
+    pub typeID: ids::TypeID,
+    #[serde(default)]
+    pub associatedShipTypes: Vec<ids::TypeID>,
+    pub durationDays: u32,
+    pub hidden: bool,
+    pub internalName: String,
+    pub retired: bool,
+    #[serde(deserialize_with="deserialize_expertsystem_skills")]
+    pub skillsGranted: IndexMap<ids::TypeID, values::SkillLevel>
+}
+
+impl_map_collect!(ids::TypeID, ExpertSystem, typeID);
+
+fn deserialize_expertsystem_skills<'de, D: Deserializer<'de>>(deserializer: D) -> Result<IndexMap<ids::TypeID, values::SkillLevel>, D::Error> {
+    struct MapVisitor;
+    impl<'de> Visitor<'de> for MapVisitor {
+        type Value = IndexMap<ids::TypeID, values::SkillLevel>;
+
+        fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            formatter.write_str("array of expert system skill levels")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
+            #[derive(Debug, Deserialize)]
+            #[allow(non_snake_case)]
+            #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+            struct ExpertSystemSkillLevel {
+                level: values::SkillLevel,
+                typeID: ids::TypeID
+            }
+
+            let size_hint = seq.size_hint();
+            let mut map = size_hint.map(IndexMap::with_capacity).unwrap_or_else(IndexMap::new);
+            while let Some(value) = seq.next_element::<ExpertSystemSkillLevel>()? {
+                map.insert(value.typeID, value.level);
+            }
+            Ok(map)
+        }
+    }
+
+    deserializer.deserialize_seq(MapVisitor)
 }
 
 /// The major and minor NPC factions
@@ -1397,6 +1547,66 @@ pub struct Faction {
 }
 
 impl_map_collect!(ids::FactionID, Faction, factionID);
+
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="fighterAbilities"))]
+pub struct FighterAbility {
+    #[serde(rename="_key")]
+    pub fighterAbilityID: ids::FighterAbilityID,
+    pub displayName: LocalizedString,
+    pub tooltipText: Option<LocalizedString>,
+    pub disallowInHighSec: bool,
+    pub disallowInLowSec: bool,
+    pub iconID: ids::IconID,
+    pub targetMode: FighterAbilityTargetMode,
+    pub turretGraphicID: Option<ids::GraphicID>
+}
+
+impl_map_collect!(ids::FighterAbilityID, FighterAbility, fighterAbilityID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_camel_case_types)]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub enum FighterAbilityTargetMode {
+    itemTargeted,
+    pointTargeted,
+    untargeted
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="fighterAbilitiesByType"))]
+pub struct FighterAbilitiesByType {
+    #[serde(rename="_key")]
+    pub typeID: ids::TypeID,
+    pub abilitySlot0: FighterAbilityInfo,
+    pub abilitySlot1: FighterAbilityInfo,
+    pub abilitySlot2: Option<FighterAbilityInfo>,
+}
+
+impl_map_collect!(ids::TypeID, FighterAbilitiesByType, typeID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct FighterAbilityInfo {
+    pub abilityID: ids::FighterAbilityID,
+    pub cooldownSeconds: Option<u32>,
+    pub charges: Option<FighterAbilityCharges>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct FighterAbilityCharges {
+    pub chargeCount: u32,
+    pub rearmTimeSeconds: u32
+}
+
 /// Freelance job schema, describes the possible kinds of freelance job
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
@@ -1616,6 +1826,48 @@ pub struct JobSchemaParameterMatcher {
     pub unsetDescription: LocalizedString
 }
 
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="graphics"))]
+pub struct GraphicMaterialSet {
+    /// ID for this material set
+    #[serde(rename="_key")]
+    pub materialSetID: ids::MaterialSetID,
+    pub description: String,
+    pub colorHull: Option<ARGB>,
+    pub colorPrimary: Option<ARGB>,
+    pub colorSecondary: Option<ARGB>,
+    pub colorWindow: Option<ARGB>,
+    pub custommaterial1: Option<String>,
+    pub custommaterial2: Option<String>,
+    pub material1: Option<String>,
+    pub material2: Option<String>,
+    pub material3: Option<String>,
+    pub material4: Option<String>,
+    pub resPathInsert: Option<String>,
+    pub sofFactionName: Option<String>,
+    pub sofPatternName: Option<String>,
+    pub sofRaceHint: Option<String>,
+}
+
+impl_map_collect!(ids::MaterialSetID, GraphicMaterialSet, materialSetID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct ARGB {
+    /// Alpha channel, in range 0-1
+    pub a: f64,
+    /// Red channel, in range 0-1
+    pub r: f64,
+    /// Green channel, in range 0-1
+    pub g: f64,
+    /// Blue channel, in range 0-1
+    pub b: f64,
+}
+
 /// 3D Graphics information, such as metadata for models+textures
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
@@ -1692,6 +1944,168 @@ pub struct Icon {
 
 impl_map_collect!(ids::IconID, Icon, iconID);
 
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="industryActivities"))]
+pub struct IndustryActivity {
+    #[serde(rename="_key")]
+    pub industryActivityID: ids::IndustryActivityID,
+    pub name: String,
+    pub description: String
+}
+
+impl_map_collect!(ids::IndustryActivityID, IndustryActivity, industryActivityID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="industryActivities"))]
+pub struct IndustryAssemblyLine {
+    #[serde(rename="_key")]
+    pub industryAssemblyLineID: ids::IndustryAssemblyLineID,
+    pub name: String,
+    pub description: Option<String>,
+    pub activityID: ids::IndustryActivityID,
+    pub baseCostMultiplier: Option<f64>,
+    pub baseMaterialMultiplier: f64,
+    pub baseTimeMultiplier: f64,
+    pub detailsPerCategory: Option<Vec<IndustryAssemblyLineDetailsPerCategory>>,
+    pub detailsPerGroup: Option<Vec<IndustryAssemblyLineDetailsPerGroup>>,
+    pub detailsPerTypeList: Option<Vec<IndustryAssemblyLineDetailsPerTypeList>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct IndustryAssemblyLineDetailsPerCategory {
+    pub categoryID: ids::CategoryID,
+    pub costMultiplier: Option<f64>,
+    pub materialMultiplier: f64,
+    pub timeMultiplier: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct IndustryAssemblyLineDetailsPerGroup {
+    pub groupID: ids::GroupID,
+    pub costMultiplier: Option<f64>,
+    pub materialMultiplier: f64,
+    pub timeMultiplier: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct IndustryAssemblyLineDetailsPerTypeList {
+    pub typeListID: ids::TypeListID,
+    pub costMultiplier: Option<f64>,
+    pub materialMultiplier: f64,
+    pub timeMultiplier: f64,
+}
+
+impl_map_collect!(ids::IndustryAssemblyLineID, IndustryAssemblyLine, industryAssemblyLineID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="industryInstallationTypes"))]
+pub struct IndustryInstallationType {
+    #[serde(rename="_key")]
+    pub typeID: ids::TypeID,
+    #[serde(deserialize_with="deserialize_industry_installation_type_assemblylines")]
+    pub assemblyLines: Vec<ids::IndustryAssemblyLineID>
+}
+
+impl_map_collect!(ids::TypeID, IndustryInstallationType, typeID);
+
+fn deserialize_industry_installation_type_assemblylines<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<ids::IndustryAssemblyLineID>, D::Error> {
+    struct SeqVisitor;
+    impl<'de> Visitor<'de> for SeqVisitor {
+        type Value = Vec<ids::IndustryAssemblyLineID>;
+
+        fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            formatter.write_str("array of industry assemblyline IDs")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
+            #[derive(Debug, Deserialize)]
+            #[allow(non_snake_case)]
+            #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+            struct AssemblyLineInfo {
+                assemblyLineID: ids::IndustryAssemblyLineID
+            }
+
+            let size_hint = seq.size_hint();
+            let mut vec = size_hint.map(Vec::with_capacity).unwrap_or_else(Vec::new);
+            while let Some(value) = seq.next_element::<AssemblyLineInfo>()? {
+                vec.push(value.assemblyLineID)
+            }
+            Ok(vec)
+        }
+    }
+
+    deserializer.deserialize_seq(SeqVisitor)
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="industryModifierSources"))]
+pub struct IndustryModifierSource {
+    #[serde(rename="_key")]
+    pub typeID: ids::TypeID,
+    pub copying: Option<IndustryModifier>,
+    pub invention: Option<IndustryModifier>,
+    pub manufacturing: Option<IndustryModifier>,
+    pub reaction: Option<IndustryModifier>,
+    pub researchMaterial: Option<IndustryModifier>,
+    pub researchTime: Option<IndustryModifier>,
+}
+
+impl_map_collect!(ids::TypeID, IndustryModifierSource, typeID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct IndustryModifier {
+    #[serde(default)]
+    pub cost: Vec<IndustryModifierAttribute>,
+    #[serde(default)]
+    pub time: Vec<IndustryModifierAttribute>,
+    #[serde(default)]
+    pub material: Vec<IndustryModifierAttribute>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct IndustryModifierAttribute {
+    pub dogmaAttributeID: ids::AttributeID,
+    pub filterID: Option<ids::IndustryFilterID>
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="industryTargetFilters"))]
+pub struct IndustryTargetFilter {
+    #[serde(rename="_key")]
+    pub filterID: ids::IndustryFilterID,
+    pub name: String,
+    #[serde(default)]
+    pub categoryIDs: Vec<ids::CategoryID>,
+    #[serde(default)]
+    pub groupIDs: Vec<ids::GroupID>,
+}
+
+impl_map_collect!(ids::IndustryFilterID, IndustryTargetFilter, filterID);
 
 /// Landmark in the game world
 #[derive(Debug, Deserialize)]
@@ -1715,6 +2129,44 @@ pub struct Landmark {
 }
 
 impl_map_collect!(ids::LandmarkID, Landmark, landmarkID);
+
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="linkWithShip"))]
+pub struct LinkWithShip {
+    /// TypeID of the linking object
+    #[serde(rename = "_key")]
+    pub typeID: ids::TypeID,
+    pub applyPvpFlag: bool,
+    pub canRelink: bool,
+    #[serde(deserialize_with="deserialize_explicit_entry_map")]
+    pub dbuffs: IndexMap<ids::DynamicBuffID, f64>,
+    /// Activation cost, known as 'Complex Encryption Qubits' in-game
+    pub characterEnergyCost: Option<f64>,
+    /// Duration in seconds until Link completes
+    ///
+    /// Total effect duration is `linkDuration` + `dbuffPostLinkDuration`
+    pub linkDuration: u32,
+    /// Duration in seconds that `dbuffs` remain in effect after Link completes
+    ///
+    /// Total effect duration is `linkDuration` + `dbuffPostLinkDuration`
+    pub dbuffPostLinkDuration: u32,
+    /// Unused
+    pub generateCynoInhibitor: bool,
+    /// ??? (Used for skyhook theft, but not the full `linkDuration` is retained?)
+    pub keepDbuffDurationOnLinkBreak: bool,
+    pub linkEffectGraphicIDOverride: ids::GraphicID,
+    pub linkableShipTypeListID: ids::TypeListID,
+    /// Link range in metres
+    pub maxLinkRange: f64,
+    pub omegaOnly: bool,
+    /// Cost to Solarsystem 'Interference'
+    pub solarsystemInterferenceCost: Option<f64> // TODO: Document how system interference numbers work
+}
+
+impl_map_collect!(ids::TypeID, LinkWithShip, typeID);
 
 
 /// Asteroid belt
@@ -2184,7 +2636,7 @@ impl SolarSystem {
     ///
     /// returns: String
     pub fn security_text(&self, force_sign: bool) -> String {
-        #[expect(unused_parens, reason="compiler bug; https://github.com/rust-lang/rust/issues/120737")]
+        #[allow(unused_parens)] // compiler bug; https://github.com/rust-lang/rust/issues/120737
         let (negative, n, decimal) = if matches!(self.securityStatus, (..=0.0 | 0.05..)) {
             let n = (self.securityStatus * 10.0).round() as i8;
             (self.securityStatus < 0.0, i8::unsigned_abs(n / 10), i8::unsigned_abs(n % 10))
@@ -2203,7 +2655,7 @@ impl SolarSystem {
 
     /// Returns rounded security status, as displayed ingame
     pub fn security_rounded(&self) -> f64 {
-        #[expect(unused_parens, reason="compiler bug; https://github.com/rust-lang/rust/issues/120737")]
+        #[allow(unused_parens)] // compiler bug; https://github.com/rust-lang/rust/issues/120737
         if matches!(self.securityStatus, (..=0.0 | 0.05..)) {
             (self.securityStatus * 10.0).round() / 10.0
         } else {
@@ -2474,6 +2926,22 @@ pub struct MetaGroupColor {
 }
 
 impl_map_collect!(ids::MetaGroupID, MetaGroup, metaGroupID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="metenoxMoonDrill"))]
+pub struct MetenoxMoonDrill {   // TODO: Maybe just make singleton?, TODO: This still doesn't specify what reagent is used T.T
+    /// Drill typeID
+    #[serde(rename="_key")]
+    pub typeID: ids::TypeID,
+    /// Cycle time in seconds
+    pub miningCycleTime: u32,
+    pub miningEfficiency: f64,
+    pub reagentsConsumedPerCycle: u32,
+}
+
+impl_map_collect!(ids::TypeID, MetenoxMoonDrill, typeID);
 
 /// Military Campaign
 #[derive(Debug, Deserialize)]
@@ -2809,6 +3277,20 @@ pub struct MissionKill {
     pub objectiveQuantity: Option<u32>,
     pub objectiveTypeID: Option<ids::TypeID>
 }
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="notificationTypes"))]
+pub struct NotificationType {
+    /// CharacterID for this NPC
+    #[serde(rename = "_key")]
+    pub notificationTypeID: ids::NotificationTypeID,
+    pub displayName: Option<LocalizedString>,
+    pub internalName: String
+}
+
+impl_map_collect!(ids::NotificationTypeID, NotificationType, notificationTypeID);
 
 
 /// NPC character
@@ -3235,14 +3717,35 @@ impl InlineEntry<ids::TypeID> for PlanetSchematicType {
 
 impl_map_collect!(ids::PlanetSchematicID, PlanetSchematic, schematicID);
 
-/// NPC or player character race
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="proximityTrap"))]
+pub struct ProximityTrap {
+    /// Trap object
+    #[serde(rename = "_key")]
+    pub typeID: ids::TypeID,
+    pub dbuffDuration: u32,
+    #[serde(default)]
+    #[serde(deserialize_with="deserialize_explicit_entry_map")]
+    pub dbuffs: IndexMap<ids::DynamicBuffID, f64>,
+    pub forceDecloakDuration: Option<u32>,
+    pub resetDelay: Option<u32>,
+    pub showPerimeterLights: bool,
+    pub triggerDelay: u32,
+    pub triggerFilterTypeListID: ids::TypeListID,
+    pub triggerRange: f64
+}
+
+impl_map_collect!(ids::TypeID, ProximityTrap, typeID);
+
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
 #[cfg_attr(feature="docs_export", doc_sde(sde_file="races"))]
 pub struct CharacterRace {
     /// ID for this character race
-    #[serde(rename="_key")]
+    #[serde(rename = "_key")]
     pub raceID: ids::RaceID,
     /// Race name
     pub name: LocalizedString,
@@ -3251,7 +3754,7 @@ pub struct CharacterRace {
     /// Race icon
     pub iconID: Option<ids::IconID>,
     /// "Rookie Ship" / Corvette for player characters of this race
-    pub shipTypeID: Option<ids::TypeID>, // Corvette/"Rookie ship"
+    pub shipTypeID: Option<ids::TypeID>,
     /// "Default" skills all players characters of this race already have upon starting the game
     #[serde(default)]
     #[serde(deserialize_with="deserialize_explicit_entry_map")]
@@ -3259,6 +3762,43 @@ pub struct CharacterRace {
 }
 
 impl_map_collect!(ids::RaceID, CharacterRace, raceID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="schoolMap"))]
+pub struct SchoolMap {
+    #[serde(rename="_key")]
+    pub mappingID: u32, // TODO: Better name
+    pub schoolID: ids::SchoolID,
+    pub solarSystemID: ids::SolarSystemID
+}
+
+impl_map_collect!(ids::SchoolID, ids::SolarSystemID, SchoolMap, fn |m| (m.schoolID, m.solarSystemID));
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="schools"))]
+pub struct School {
+    #[serde(rename="_key")]
+    pub schoolID: ids::SchoolID,
+    #[serde(default)]
+    pub careerAgents: Vec<ids::CharacterID>,
+    pub careerID: ids::CareerID,
+    pub characterDescription: Option<LocalizedString>,
+    pub corporationID: ids::CorporationID,
+    pub description: Option<LocalizedString>,
+    pub iconID: Option<ids::IconID>,
+    pub isStarterSpaceSchool: Option<bool>, // TODO: Default?
+    pub name: LocalizedString,
+    pub raceID: ids::RaceID,
+    #[serde(default)]
+    pub startingStations: Vec<ids::StationID>,
+    pub title: Option<LocalizedString>
+}
+
+impl_map_collect!(ids::SchoolID, School, schoolID);
 
 
 /// Ship Tree Element (Used weapon type, used tank type, etc)
@@ -3350,6 +3890,285 @@ impl InlineEntry<ids::TypeID> for ShipTreeGroupSkillInfo {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skillPlans"))]
+pub struct SkillPlan {
+    pub _key: u32,  // TODO: Document
+    pub careerPathID: Option<ids::CareerPathID>,
+    pub name: LocalizedString,
+    pub description: LocalizedString,
+    pub factionID: Option<ids::FactionID>,
+    pub internalName: String,
+    pub npcCorporationDivision: Option<ids::DivisionID>,
+    #[serde(deserialize_with = "deserialize_skillplan_milestones")]
+    pub milestones: IndexMap<ids::TypeID, Option<values::SkillLevel>>,
+    #[serde(deserialize_with = "deserialize_skillplan_levels")]
+    pub skillRequirements: IndexMap<ids::TypeID, values::SkillLevel>,
+}
+
+fn deserialize_skillplan_levels<'de, D: Deserializer<'de>>(deserializer: D) -> Result<IndexMap<ids::TypeID, values::SkillLevel>, D::Error> {
+    struct EntryVisitor;
+    impl<'de> Visitor<'de> for EntryVisitor {
+        type Value = IndexMap<ids::TypeID, values::SkillLevel>;
+
+        fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            formatter.write_str("array of skill level objects")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
+            #[derive(Debug, Deserialize)]
+            #[allow(non_snake_case)]
+            #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+            struct SkillLevel {
+                pub typeID: ids::TypeID,
+                pub level: values::SkillLevel
+            }
+
+            let size_hint = seq.size_hint();
+            let mut map = size_hint.map(IndexMap::with_capacity).unwrap_or_else(IndexMap::new);
+            while let Some(value) = seq.next_element::<SkillLevel>()? {
+                map.insert(value.typeID, value.level);
+            }
+            Ok(map)
+        }
+    }
+
+    deserializer.deserialize_seq(EntryVisitor)
+}
+
+fn deserialize_skillplan_milestones<'de, D: Deserializer<'de>>(deserializer: D) -> Result<IndexMap<ids::TypeID, Option<values::SkillLevel>>, D::Error> {
+    struct EntryVisitor;
+    impl<'de> Visitor<'de> for EntryVisitor {
+        type Value = IndexMap<ids::TypeID, Option<values::SkillLevel>>;
+
+        fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            formatter.write_str("array of skill milestone objects")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
+            #[derive(Debug, Deserialize)]
+            #[allow(non_snake_case)]
+            #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+            struct SkillLevel {
+                pub typeID: ids::TypeID,
+                pub level: Option<values::SkillLevel>
+            }
+
+            let size_hint = seq.size_hint();
+            let mut map = size_hint.map(IndexMap::with_capacity).unwrap_or_else(IndexMap::new);
+            while let Some(value) = seq.next_element::<SkillLevel>()? {
+                map.insert(value.typeID, value.level);
+            }
+            Ok(map)
+        }
+    }
+
+    deserializer.deserialize_seq(EntryVisitor)
+}
+
+impl_map_collect!(u32, SkillPlan, _key);
+
+// SKINR
+
+
+/// SKINR Component Category (currently: Material, Pattern, Metallic [material]
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrComponentCategories"))]
+pub struct SKINRComponentCategory {
+    #[serde(rename="_key")]
+    pub componentCategoryID: ids::SKINRComponentCategoryID,
+    pub name: String
+}
+
+impl_map_collect!(ids::SKINRComponentCategoryID, SKINRComponentCategory, componentCategoryID);
+
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrComponentPointValues"))]
+pub struct SKINRComponentPointValues {
+    pub _key: ids::SKINRComponentCategoryID,  // TODO: Document
+    #[serde(rename="_value")]
+    #[serde(deserialize_with="deserialize_explicit_entry_map")]
+    pub points: IndexMap<ids::SKINRComponentCategoryID, u32>
+}
+
+impl_map_collect!(ids::SKINRComponentCategoryID, SKINRComponentPointValues, _key);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrComponentRarities"))]
+pub struct SKINRComponentRarity {
+    pub _key: u32,  // TODO: Document
+    pub name: LocalizedString,
+    pub rank: u32
+}
+
+impl_map_collect!(u32, SKINRComponentRarity, _key);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrComponents"))]
+pub struct SKINRComponent {
+    #[serde(rename = "_key")]
+    pub componentID: ids::SKINRComponentID,
+    pub category: ids::SKINRComponentCategoryID,
+    #[serde(deserialize_with="deserialize_component_associated_typeids")]
+    pub associatedTypeIds: IndexMap<ids::TypeID, i32>,
+    pub finish: SKINRFinish,
+    pub iconFile: String,
+    pub name: LocalizedString,
+    pub projectionTypeU: String,
+    pub projectionTypeV: String,
+    pub published: bool,
+    pub rarity: ids::SKINRComponentRarity,
+    pub resourceFile: String,
+    pub sequenceBinder: SKINRSequenceBinder
+}
+
+fn deserialize_component_associated_typeids<'de, D: Deserializer<'de>>(deserializer: D) -> Result<IndexMap<ids::TypeID, i32>, D::Error> {
+    struct EntryVisitor;
+    impl<'de> Visitor<'de> for EntryVisitor {
+        type Value = IndexMap<ids::TypeID, i32>;
+
+        fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            formatter.write_str("array of skill milestone objects")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
+            #[derive(Debug, Deserialize)]
+            #[allow(non_snake_case)]
+            #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+            struct Entry {
+                pub typeID: ids::TypeID,
+                pub licenseUsesGranted : i32
+            }
+
+            let size_hint = seq.size_hint();
+            let mut map = size_hint.map(IndexMap::with_capacity).unwrap_or_else(IndexMap::new);
+            while let Some(value) = seq.next_element::<Entry>()? {
+                map.insert(value.typeID, value.licenseUsesGranted);
+            }
+            Ok(map)
+        }
+    }
+
+    deserializer.deserialize_seq(EntryVisitor)
+}
+
+impl_map_collect!(ids::SKINRComponentID, SKINRComponent, componentID);
+
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub enum SKINRFinish {
+    Matte, Satin, Gloss
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct SKINRSequenceBinder {
+    pub itemTypeID: ids::TypeID,
+    pub count: u32
+}
+
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrSlotCategories"))]
+pub struct SKINRSlotCategory {
+    #[serde(rename="_key")]
+    pub slotCategoryID: ids::SKINRSlotCategoryID,
+    pub name: String
+}
+
+impl_map_collect!(ids::SKINRSlotCategoryID, SKINRSlotCategory, slotCategoryID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrSlotConfigurations"))]
+pub struct SKINRSlotConfiguration {
+    pub _key: u32,  // TODO: Document
+    pub allowAllShips: Option<bool>,
+    pub config: Option<Vec<u32>>,
+    pub name: String,
+    pub priority: u32,
+    pub ships: Option<Vec<ids::TypeID>>
+}
+
+impl_map_collect!(u32, SKINRSlotConfiguration, _key);
+
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrSlotNames"))]
+pub struct SKINRSlotName {
+    pub _key: u32,  // TODO: Document
+    pub name: String
+}
+
+impl_map_collect!(u32, SKINRSlotName, _key);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrSlots"))]
+pub struct SKINRSlot {
+    pub _key: u32,  // TODO: Document
+    pub category: ids::SKINRSlotCategoryID,
+    pub name: LocalizedString,
+    pub allowedDesignComponentCategories: Vec<ids::SKINRComponentCategoryID>
+}
+
+impl_map_collect!(u32, SKINRSlot, _key);
+
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrSlotsToMaterials"))]
+pub struct SKINRSlotsToMaterials {
+    pub _key: u32,  // TODO: Document
+    pub _value: Vec<SKINRSlotMaterialBinding>
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(internal_type))]
+pub struct SKINRSlotMaterialBinding {
+    pub materialID: u32,
+    pub slotID: u32
+}
+
+impl_map_collect!(u32, SKINRSlotsToMaterials, _key);
+
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="skinrTierThresholds"))]
+pub struct SKINRTierThreshold {
+    pub _key: u32,  // TODO: Document
+    #[serde(deserialize_with="deserialize_explicit_entry_map")]
+    pub _value: IndexMap<u32, u32>
+}
+
+impl_map_collect!(u32, SKINRTierThreshold, _key);
 
 /// Skin license item
 #[derive(Debug, Deserialize)]
@@ -3517,6 +4336,53 @@ pub struct StationService { // TODO: Document icons somewhere
 
 impl_map_collect!(ids::StationServiceID, StationService, serviceID);
 
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="stationStandingsRestrictions"))]
+pub struct StationStandingsRestriction {
+    /// Faction this restriction applies to
+    #[serde(rename="_key")]
+    pub factionID: ids::FactionID,
+    #[serde(deserialize_with="deserialize_explicit_entry_map")]
+    pub services: IndexMap<ids::StationServiceID, f64>
+}
+
+impl_map_collect!(ids::FactionID, StationStandingsRestriction, factionID);
+
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="systemDbuffEmitters"))]
+pub struct SystemDynamicbuffEmitter {
+    #[serde(rename="_key")]
+    pub typeID: ids::TypeID,
+    #[serde(deserialize_with="deserialize_explicit_entry_map")]
+    pub dbuffs: IndexMap<ids::DynamicBuffID, f64>,
+    pub duration: u32,
+    pub excludeProtected: bool,
+    pub interval: u32
+}
+
+impl_map_collect!(ids::TypeID, SystemDynamicbuffEmitter, typeID);
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="systemWideEffects"))]
+pub struct SystemWideEffect {
+    #[serde(rename="_key")]
+    pub typeID: ids::TypeID,
+    #[serde(default)]
+    #[serde(deserialize_with="deserialize_explicit_entry_map")]
+    pub dbuffs: IndexMap<ids::DynamicBuffID, f64>,
+    pub eligibleTypeListID: Option<ids::TypeListID>,
+    pub environmentTypeID: Option<ids::TypeID>
+}
+
+impl_map_collect!(ids::TypeID, SystemWideEffect, typeID);
+
 /// A language the game officially is translated for
 ///
 /// This SDE library handles translated strings through the [`LocalizedString`] type
@@ -3607,8 +4473,8 @@ pub struct TypeDogma {
 }
 
 fn deserialize_type_attributes<'de, D: Deserializer<'de>>(deserializer: D) -> Result<IndexMap<ids::AttributeID, f64>, D::Error> {
-    struct SeqVisitor;
-    impl<'de> Visitor<'de> for SeqVisitor {
+    struct EntryVisitor;
+    impl<'de> Visitor<'de> for EntryVisitor {
         type Value = IndexMap<ids::AttributeID, f64>;
 
         fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
@@ -3633,12 +4499,12 @@ fn deserialize_type_attributes<'de, D: Deserializer<'de>>(deserializer: D) -> Re
         }
     }
 
-    deserializer.deserialize_seq(SeqVisitor)
+    deserializer.deserialize_seq(EntryVisitor)
 }
 
 fn deserialize_type_effects<'de, D: Deserializer<'de>>(deserializer: D) -> Result<IndexMap<ids::EffectID, bool>, D::Error> {
-    struct SeqVisitor;
-    impl<'de> Visitor<'de> for SeqVisitor {
+    struct EntryVisitor;
+    impl<'de> Visitor<'de> for EntryVisitor {
         type Value = IndexMap<ids::EffectID, bool>;
 
         fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
@@ -3663,10 +4529,24 @@ fn deserialize_type_effects<'de, D: Deserializer<'de>>(deserializer: D) -> Resul
         }
     }
 
-    deserializer.deserialize_seq(SeqVisitor)
+    deserializer.deserialize_seq(EntryVisitor)
 }
 
 impl_map_collect!(ids::TypeID, TypeDogma, typeID);
+
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
+#[cfg_attr(feature="docs_export", doc_sde(sde_file="typeElements"))]
+pub struct TypeElement {
+    #[serde(rename="_key")]
+    pub typeID: ids::TypeID,
+    #[serde(deserialize_with="deserialize_explicit_entry_map")]
+    pub elements: IndexMap<u32, u32>,   // TODO: Document key/value
+}
+
+impl_map_collect!(ids::TypeID, TypeElement, typeID);
 
 /// TypeList; List of types
 #[derive(Debug, Deserialize)]
@@ -3831,6 +4711,8 @@ pub struct Type {
     pub metaGroupID: Option<ids::MetaGroupID>,
     /// Meta level; Ordinal ranking of types
     pub metaLevel: Option<values::MetaLevel>,
+    /// Tech level; Whether this item is Tech 1, Tech 2, or Tech 3 regardless of metaGroup (e.g. 'faction T2'). Caution: Some types have unusual values
+    pub techLevel: Option<values::TechLevel>,
     /// Marketgroup for this type. `None` indicates this type cannot be sold on the market, but may possibly be sold through contracts
     pub marketGroupID: Option<ids::MarketGroupID>,
     /// Variant type "parent"; The basic tier 1 version of this module/ship/etc.
@@ -3872,7 +4754,17 @@ pub struct Type {
     /// soundID is not currently useful for third party developers as information about sounds is not made available
     pub soundID: Option<ids::SoundID>,
     /// ShipTree Group
-    pub shipTreeGroupID: Option<ids::ShipTreeGroupID>
+    pub shipTreeGroupID: Option<ids::ShipTreeGroupID>,
+    /// Volume when packaged
+    ///
+    /// Only applicable if [`Type::isRepackable`] is set true
+    pub packagedVolume: Option<f64>,
+    /// If true, this item can be (re)packaged
+    #[serde(default)] // Types without this field are not repackable
+    pub isRepackable: bool,
+    /// If true, this item is a dynamic type for which attributes are given per-instance through [`DynamicItemAttributes`]
+    #[serde(default)]
+    pub isDynamicType: bool
 }
 
 impl_map_collect!(ids::TypeID, Type, typeID);
@@ -3883,9 +4775,11 @@ impl_map_collect!(ids::TypeID, Type, typeID);
 #[allow(non_camel_case_types)]  // "SDE" is an abbreviation here
 #[derive(Debug)]
 pub struct SDE_Full {
+    pub accounting_entry_types: IndexMap<ids::AccountingEntryTypeID, AccountingEntryType>,
     pub agent_types: IndexMap<ids::AgentTypeID, AgentType>,
     pub agents_in_space: IndexMap<ids::CharacterID, AgentInSpace>,
     pub ancestries: IndexMap<ids::AncestryID, Ancestry>,
+    pub applied_proximity_effects: IndexMap<ids::TypeID, AppliedProximityEffect>,
     pub archetypes: IndexMap<ids::DungeonArchetypeID, Archetype>,
     pub bloodlines: IndexMap<ids::BloodlineID, Bloodline>,
     pub blueprints: IndexMap<ids::TypeID, Blueprint>,
@@ -3898,19 +4792,32 @@ pub struct SDE_Full {
     pub contraband_types: IndexMap<ids::TypeID, ContrabandType>,
     pub control_tower_resources: IndexMap<ids::TypeID, ControlTowerResources>,
     pub corporation_activities: IndexMap<ids::CorporationActivityID, CorporationActivity>,
-    pub dbuff_collections: IndexMap<ids::WarfareBuffID, WarfareBuff>,
+    pub corporation_role_groups: IndexMap<ids::CorporationRoleGroupID, CorporationRoleGroup>,
+    pub corporation_roles: IndexMap<ids::CorporationRoleID, CorporationRole>,
+    pub dbuff_collections: IndexMap<ids::DynamicBuffID, DynamicBuff>,
     pub dogma_attribute_categories: IndexMap<ids::AttributeCategoryID, AttributeCategory>,
     pub dogma_attributes: IndexMap<ids::AttributeID, Attribute>,
     pub dogma_effects: IndexMap<ids::EffectID, Effect>,
     pub dogma_units: IndexMap<EVEUnit, DogmaUnit>,
     pub dungeons: IndexMap<ids::DungeonID, Dungeon>,
     pub dynamic_item_attributes: IndexMap<ids::TypeID, DynamicItemAttributes>,
+    pub epic_arcs: IndexMap<ids::EpicArcID, EpicArc>,
+    pub expert_systems: IndexMap<ids::TypeID, ExpertSystem>,
     pub factions: IndexMap<ids::FactionID, Faction>,
+    pub fighter_abilities: IndexMap<ids::FighterAbilityID, FighterAbility>,
+    pub fighter_abilities_by_type: IndexMap<ids::TypeID, FighterAbilitiesByType>,
     pub freelance_job_schemas: IndexMap<ids::JobSchemaID, Vec<FreelanceJobSchema>>,
+    pub graphic_material_sets: IndexMap<ids::MaterialSetID, GraphicMaterialSet>,
     pub graphics: IndexMap<ids::GraphicID, Graphic>,
     pub groups: IndexMap<ids::GroupID, Group>,
     pub icons: IndexMap<ids::IconID, Icon>,
+    pub industry_activities: IndexMap<ids::IndustryActivityID, IndustryActivity>,
+    pub industry_assembly_lines: IndexMap<ids::IndustryAssemblyLineID, IndustryAssemblyLine>,
+    pub industry_installation_types: IndexMap<ids::TypeID, IndustryInstallationType>,
+    pub industry_modifier_sources: IndexMap<ids::TypeID, IndustryModifierSource>,
+    pub industry_target_filters: IndexMap<ids::IndustryFilterID, IndustryTargetFilter>,
     pub landmarks: IndexMap<ids::LandmarkID, Landmark>,
+    pub link_with_ship: IndexMap<ids::TypeID, LinkWithShip>,
     pub map_asteroid_belts: IndexMap<ids::AsteroidBeltID, AsteroidBelt>,
     pub map_constellations: IndexMap<ids::ConstellationID, Constellation>,
     pub map_moons: IndexMap<ids::MoonID, Moon>,
@@ -3924,30 +4831,48 @@ pub struct SDE_Full {
     pub masteries: IndexMap<ids::TypeID, MasteryInfo>,
     pub mercenary_tactical_operations: IndexMap<ids::DungeonID, MercenaryTacticalOperation>,
     pub meta_groups: IndexMap<ids::MetaGroupID, MetaGroup>,
-    pub military_campaigns: IndexMap<uuids::MilitaryCampaignID, MilitaryCampaign>,
+    pub metenox_moon_drill: IndexMap<ids::TypeID, MetenoxMoonDrill>,
     pub military_campaign_objectives: IndexMap<uuids::MilitaryCampaignObjectiveID, MilitaryCampaignObjective>,
+    pub military_campaigns: IndexMap<uuids::MilitaryCampaignID, MilitaryCampaign>,
     pub missions: IndexMap<ids::MissionID, Mission>,
+    pub notification_types: IndexMap<ids::NotificationTypeID, NotificationType>,
     pub npc_characters: IndexMap<ids::CharacterID, NpcCharacter>,
     pub npc_corporation_divisions: IndexMap<ids::DivisionID, CorporationDivision>,
     pub npc_corporations: IndexMap<ids::CorporationID, NpcCorporation>,
     pub npc_stations: IndexMap<ids::StationID, NpcStation>,
     pub planet_resources: IndexMap<ids::PlanetID, PlanetResource>,
     pub planet_schematics: IndexMap<ids::PlanetSchematicID, PlanetSchematic>,
+    pub proximity_trap: IndexMap<ids::TypeID, ProximityTrap>,
     pub races: IndexMap<ids::RaceID, CharacterRace>,
+    pub school_map: IndexMap<ids::SchoolID, ids::StationID>,
+    pub schools: IndexMap<ids::SchoolID, School>,
     pub ship_tree_elements: IndexMap<ids::ShipTreeElementID, ShipTreeElement>,
     pub ship_tree_factions: IndexMap<ids::FactionID, ShipTreeFaction>,
     pub ship_tree_groups: IndexMap<ids::ShipTreeGroupID, ShipTreeGroup>,
-
-
+    pub skill_plans: IndexMap<u32, SkillPlan>,
     pub skin_licenses: IndexMap<ids::TypeID, SkinLicense>,
     pub skin_materials: IndexMap<ids::SkinMaterialID, SkinMaterial>,
+    pub skinr_component_categories: IndexMap<ids::SKINRComponentCategoryID, SKINRComponentCategory>,
+    pub skinr_component_point_values: IndexMap<ids::SKINRComponentCategoryID, SKINRComponentPointValues>,
+    pub skinr_component_rarities: IndexMap<u32, SKINRComponentRarity>,
+    pub skinr_components: IndexMap<ids::TypeID, SKINRComponent>,
+    pub skinr_slot_categories: IndexMap<ids::SKINRSlotCategoryID, SKINRSlotCategory>,
+    pub skinr_slot_configurations: IndexMap<u32, SKINRSlotConfiguration>,
+    pub skinr_slot_names: IndexMap<u32, SKINRSlotName>,
+    pub skinr_slots: IndexMap<u32, SKINRSlot>,
+    pub skinr_slots_to_materials: IndexMap<u32, SKINRSlotsToMaterials>,
+    pub skinr_tier_thresholds: IndexMap<u32, SKINRTierThreshold>,
     pub skins: IndexMap<ids::SkinID, Skin>,
     pub sovereignty_upgrades: IndexMap<ids::TypeID, SovereigntyUpgrade>,
     pub station_operations: IndexMap<ids::StationOperationID, StationOperation>,
     pub station_services: IndexMap<ids::StationServiceID, StationService>,
+    pub station_standings_restrictions: IndexMap<ids::FactionID, StationStandingsRestriction>,
+    pub system_dbuff_emitters: IndexMap<ids::TypeID, SystemDynamicbuffEmitter>,
+    pub system_wide_effects: IndexMap<ids::TypeID, SystemWideEffect>,
     pub translation_languages: Vec<TranslationLanguage>,
     pub type_bonus: IndexMap<ids::TypeID, TypeBonuses>,
     pub type_dogma: IndexMap<ids::TypeID, TypeDogma>,
+    pub type_elements: IndexMap<ids::TypeID, TypeElement>,
     pub type_lists: IndexMap<ids::TypeListID, TypeList>,
     pub type_materials: IndexMap<ids::TypeID, TypeMaterials>,
     pub types: IndexMap<ids::TypeID, Type>,
@@ -3961,7 +4886,7 @@ pub struct SDELoader<R: Read + Seek = File> {
 
 impl SDELoader<File> {
     /// Updates the specified file to the latest version of the SDE, then opens it and returns a `SDELoader`
-    #[cfg(feature="sde_load")]
+    #[cfg(all(feature="sde_load", feature="sde_update"))]
     pub fn open_latest<P: AsRef<std::path::Path>>(file: P) -> Result<Self, SDELoadError> {
         crate::sde::update::update_sde(file.as_ref())?;
         Self::new(File::open(file)?)
@@ -4027,6 +4952,16 @@ impl<R: Read + Seek> SDELoader<R> {
         }))
     }
 
+    /// Load `accountingEntryTypes` as iterator
+    pub fn load_accounting_entry_types(&mut self) -> Result<impl Iterator<Item=Result<AccountingEntryType, SDELoadError>>, SDELoadError> {
+        self.load_file::<AccountingEntryType>("accountingEntryTypes.jsonl")
+    }
+
+    /// Load `accountingEntryTypes` as map
+    pub fn load_accounting_entry_types_map(&mut self) -> Result<IndexMap<ids::AccountingEntryTypeID, AccountingEntryType>, SDELoadError> {
+        self.load_accounting_entry_types()?.collect()
+    }
+
     /// Load 'agentTypes' as iterator
     pub fn load_agent_types(&mut self) -> Result<impl Iterator<Item=Result<(ids::AgentTypeID, AgentType), SDELoadError>>, SDELoadError> {
         self.load_file::<AgentTypeEntry>("agentTypes.jsonl")
@@ -4056,6 +4991,16 @@ impl<R: Read + Seek> SDELoader<R> {
     /// Load 'ancestries' as map
     pub fn load_ancestries_map(&mut self) -> Result<IndexMap<ids::AncestryID, Ancestry>, SDELoadError> {
         self.load_ancestries()?.collect()
+    }
+
+    /// Load `appliedProximityEffects` as iterator
+    pub fn load_applied_proximity_effects(&mut self) -> Result<impl Iterator<Item=Result<AppliedProximityEffect, SDELoadError>>, SDELoadError> {
+        self.load_file::<AppliedProximityEffect>("appliedProximityEffects.jsonl")
+    }
+
+    /// Load `appliedProximityEffects` as map
+    pub fn load_applied_proximity_effects_map(&mut self) -> Result<IndexMap<ids::TypeID, AppliedProximityEffect>, SDELoadError> {
+        self.load_applied_proximity_effects()?.collect()
     }
 
     /// Load 'archetypes' as iterator
@@ -4180,13 +5125,33 @@ impl<R: Read + Seek> SDELoader<R> {
         self.load_corporation_activities()?.collect()
     }
 
+    /// Load `corporationRoleGroups` as iterator
+    pub fn load_corporation_role_groups(&mut self) -> Result<impl Iterator<Item=Result<CorporationRoleGroup, SDELoadError>>, SDELoadError> {
+        self.load_file::<CorporationRoleGroup>("corporationRoleGroups.jsonl")
+    }
+
+    /// Load `corporationRoleGroups` as map
+    pub fn load_corporation_role_groups_map(&mut self) -> Result<IndexMap<ids::CorporationRoleGroupID, CorporationRoleGroup>, SDELoadError> {
+        self.load_corporation_role_groups()?.collect()
+    }
+
+    /// Load `corporationRoles` as iterator
+    pub fn load_corporation_roles(&mut self) -> Result<impl Iterator<Item=Result<CorporationRole, SDELoadError>>, SDELoadError> {
+        self.load_file::<CorporationRole>("corporationRoles.jsonl")
+    }
+
+    /// Load `corporationRoles` as map
+    pub fn load_corporation_roles_map(&mut self) -> Result<IndexMap<ids::CorporationRoleID, CorporationRole>, SDELoadError> {
+        self.load_corporation_roles()?.collect()
+    }
+
     /// Load 'dbuffCollections' as iterator
-    pub fn load_dbuff_collections(&mut self) -> Result<impl Iterator<Item=Result<WarfareBuff, SDELoadError>>, SDELoadError> {
-        self.load_file::<WarfareBuff>("dbuffCollections.jsonl")
+    pub fn load_dbuff_collections(&mut self) -> Result<impl Iterator<Item=Result<DynamicBuff, SDELoadError>>, SDELoadError> {
+        self.load_file::<DynamicBuff>("dbuffCollections.jsonl")
     }
 
     /// Load 'dbuffCollections' as map
-    pub fn load_dbuff_collections_map(&mut self) -> Result<IndexMap<ids::WarfareBuffID, WarfareBuff>, SDELoadError> {
+    pub fn load_dbuff_collections_map(&mut self) -> Result<IndexMap<ids::DynamicBuffID, DynamicBuff>, SDELoadError> {
         self.load_dbuff_collections()?.collect()
     }
 
@@ -4264,6 +5229,16 @@ impl<R: Read + Seek> SDELoader<R> {
         self.load_epic_arcs()?.collect()
     }
 
+    /// Load `expertSystems` as iterator
+    pub fn load_expert_systems(&mut self) -> Result<impl Iterator<Item=Result<ExpertSystem, SDELoadError>>, SDELoadError> {
+        self.load_file::<ExpertSystem>("expertSystems.jsonl")
+    }
+
+    /// Load `expertSystems` as map
+    pub fn load_expert_systems_map(&mut self) -> Result<IndexMap<ids::TypeID, ExpertSystem>, SDELoadError> {
+        self.load_expert_systems()?.collect()
+    }
+
     /// Load 'factions' as iterator
     pub fn load_factions(&mut self) -> Result<impl Iterator<Item=Result<Faction, SDELoadError>>, SDELoadError> {
         self.load_file::<Faction>("factions.jsonl")
@@ -4272,6 +5247,26 @@ impl<R: Read + Seek> SDELoader<R> {
     /// Load 'factions' as map
     pub fn load_factions_map(&mut self) -> Result<IndexMap<ids::FactionID, Faction>, SDELoadError> {
         self.load_factions()?.collect()
+    }
+
+    /// Load `fighterAbilities` as iterator
+    pub fn load_fighter_abilities(&mut self) -> Result<impl Iterator<Item=Result<FighterAbility, SDELoadError>>, SDELoadError> {
+        self.load_file::<FighterAbility>("fighterAbilities.jsonl")
+    }
+
+    /// Load `fighterAbilities` as map
+    pub fn load_fighter_abilities_map(&mut self) -> Result<IndexMap<ids::FighterAbilityID, FighterAbility>, SDELoadError> {
+        self.load_fighter_abilities()?.collect()
+    }
+
+    /// Load `fighterAbilitiesByType` as iterator
+    pub fn load_fighter_abilities_by_type(&mut self) -> Result<impl Iterator<Item=Result<FighterAbilitiesByType, SDELoadError>>, SDELoadError> {
+        self.load_file::<FighterAbilitiesByType>("fighterAbilitiesByType.jsonl")
+    }
+
+    /// Load `fighterAbilitiesByType` as map
+    pub fn load_fighter_abilities_by_type_map(&mut self) -> Result<IndexMap<ids::TypeID, FighterAbilitiesByType>, SDELoadError> {
+        self.load_fighter_abilities_by_type()?.collect()
     }
 
     /// Load 'freelanceJobSchemas' as iterator
@@ -4285,6 +5280,16 @@ impl<R: Read + Seek> SDELoader<R> {
     /// Load 'freelanceJobSchemas' as map
     pub fn load_freelance_job_schemas_map(&mut self) -> Result<IndexMap<ids::JobSchemaID, Vec<FreelanceJobSchema>>, SDELoadError> {
         self.load_freelance_job_schemas()?.collect()
+    }
+
+    /// Load `graphicMaterialSets` as iterator
+    pub fn load_graphic_material_sets(&mut self) -> Result<impl Iterator<Item=Result<GraphicMaterialSet, SDELoadError>>, SDELoadError> {
+        self.load_file::<GraphicMaterialSet>("graphicMaterialSets.jsonl")
+    }
+
+    /// Load `graphicMaterialSets` as map
+    pub fn load_graphic_material_sets_map(&mut self) -> Result<IndexMap<ids::MaterialSetID, GraphicMaterialSet>, SDELoadError> {
+        self.load_graphic_material_sets()?.collect()
     }
 
     /// Load 'graphics' as iterator
@@ -4317,6 +5322,56 @@ impl<R: Read + Seek> SDELoader<R> {
         self.load_icons()?.collect()
     }
 
+    /// Load `industryActivities` as iterator
+    pub fn load_industry_activities(&mut self) -> Result<impl Iterator<Item=Result<IndustryActivity, SDELoadError>>, SDELoadError> {
+        self.load_file::<IndustryActivity>("industryActivities.jsonl")
+    }
+
+    /// Load `industryActivities` as map
+    pub fn load_industry_activities_map(&mut self) -> Result<IndexMap<ids::IndustryActivityID, IndustryActivity>, SDELoadError> {
+        self.load_industry_activities()?.collect()
+    }
+
+    /// Load `industryAssemblyLines` as iterator
+    pub fn load_industry_assembly_lines(&mut self) -> Result<impl Iterator<Item=Result<IndustryAssemblyLine, SDELoadError>>, SDELoadError> {
+        self.load_file::<IndustryAssemblyLine>("industryAssemblyLines.jsonl")
+    }
+
+    /// Load `industryAssemblyLines` as map
+    pub fn load_industry_assembly_lines_map(&mut self) -> Result<IndexMap<ids::IndustryAssemblyLineID, IndustryAssemblyLine>, SDELoadError> {
+        self.load_industry_assembly_lines()?.collect()
+    }
+
+    /// Load `industryInstallationTypes` as iterator
+    pub fn load_industry_installation_types(&mut self) -> Result<impl Iterator<Item=Result<IndustryInstallationType, SDELoadError>>, SDELoadError> {
+        self.load_file::<IndustryInstallationType>("industryInstallationTypes.jsonl")
+    }
+
+    /// Load `industryInstallationTypes` as map
+    pub fn load_industry_installation_types_map(&mut self) -> Result<IndexMap<ids::TypeID, IndustryInstallationType>, SDELoadError> {
+        self.load_industry_installation_types()?.collect()
+    }
+
+    /// Load `industryModifierSources` as iterator
+    pub fn load_industry_modifier_sources(&mut self) -> Result<impl Iterator<Item=Result<IndustryModifierSource, SDELoadError>>, SDELoadError> {
+        self.load_file::<IndustryModifierSource>("industryModifierSources.jsonl")
+    }
+
+    /// Load `industryModifierSources` as map
+    pub fn load_industry_modifier_sources_map(&mut self) -> Result<IndexMap<ids::TypeID, IndustryModifierSource>, SDELoadError> {
+        self.load_industry_modifier_sources()?.collect()
+    }
+
+    /// Load `industryTargetFilters` as iterator
+    pub fn load_industry_target_filters(&mut self) -> Result<impl Iterator<Item=Result<IndustryTargetFilter, SDELoadError>>, SDELoadError> {
+        self.load_file::<IndustryTargetFilter>("industryTargetFilters.jsonl")
+    }
+
+    /// Load `industryTargetFilters` as map
+    pub fn load_industry_target_filters_map(&mut self) -> Result<IndexMap<ids::IndustryFilterID, IndustryTargetFilter>, SDELoadError> {
+        self.load_industry_target_filters()?.collect()
+    }
+
     /// Load 'landmarks' as iterator
     pub fn load_landmarks(&mut self) -> Result<impl Iterator<Item=Result<Landmark, SDELoadError>>, SDELoadError> {
         self.load_file::<Landmark>("landmarks.jsonl")
@@ -4325,6 +5380,16 @@ impl<R: Read + Seek> SDELoader<R> {
     /// Load 'landmarks' as map
     pub fn load_landmarks_map(&mut self) -> Result<IndexMap<ids::LandmarkID, Landmark>, SDELoadError> {
         self.load_landmarks()?.collect()
+    }
+
+    /// Load `linkWithShip` as iterator
+    pub fn load_link_with_ship(&mut self) -> Result<impl Iterator<Item=Result<LinkWithShip, SDELoadError>>, SDELoadError> {
+        self.load_file::<LinkWithShip>("linkWithShip.jsonl")
+    }
+
+    /// Load `linkWithShip` as map
+    pub fn load_link_with_ship_map(&mut self) -> Result<IndexMap<ids::TypeID, LinkWithShip>, SDELoadError> {
+        self.load_link_with_ship()?.collect()
     }
 
     /// Load 'mapAsteroidBelts' as iterator
@@ -4448,6 +5513,16 @@ impl<R: Read + Seek> SDELoader<R> {
         self.load_merc_tactical_operations()?.collect()
     }
 
+    /// Load `metenoxMoonDrill` as iterator
+    pub fn load_metenox_moon_drill(&mut self) -> Result<impl Iterator<Item=Result<MetenoxMoonDrill, SDELoadError>>, SDELoadError> {
+        self.load_file::<MetenoxMoonDrill>("metenoxMoonDrill.jsonl")
+    }
+
+    /// Load `metenoxMoonDrill` as map
+    pub fn load_metenox_moon_drill_map(&mut self) -> Result<IndexMap<ids::TypeID, MetenoxMoonDrill>, SDELoadError> {
+        self.load_metenox_moon_drill()?.collect()
+    }
+
     /// Load 'metaGroups' as iterator
     pub fn load_meta_groups(&mut self) -> Result<impl Iterator<Item=Result<MetaGroup, SDELoadError>>, SDELoadError> {
         self.load_file::<MetaGroup>("metaGroups.jsonl")
@@ -4486,6 +5561,16 @@ impl<R: Read + Seek> SDELoader<R> {
     /// Load 'missions' as map
     pub fn load_missions_map(&mut self) -> Result<IndexMap<ids::MissionID, Mission>, SDELoadError> {
         self.load_missions()?.collect()
+    }
+
+    /// Load `notificationTypes` as iterator
+    pub fn load_notification_types(&mut self) -> Result<impl Iterator<Item=Result<NotificationType, SDELoadError>>, SDELoadError> {
+        self.load_file::<NotificationType>("notificationTypes.jsonl")
+    }
+
+    /// Load `notificationTypes` as map
+    pub fn load_notification_types_map(&mut self) -> Result<IndexMap<ids::NotificationTypeID, NotificationType>, SDELoadError> {
+        self.load_notification_types()?.collect()
     }
 
     /// Load 'npcCharacters' as iterator
@@ -4548,6 +5633,16 @@ impl<R: Read + Seek> SDELoader<R> {
         self.load_planet_schematics()?.collect()
     }
 
+    /// Load `proximityTrap` as iterator
+    pub fn load_proximity_trap(&mut self) -> Result<impl Iterator<Item=Result<ProximityTrap, SDELoadError>>, SDELoadError> {
+        self.load_file::<ProximityTrap>("proximityTrap.jsonl")
+    }
+
+    /// Load `proximityTrap` as map
+    pub fn load_proximity_trap_map(&mut self) -> Result<IndexMap<ids::TypeID, ProximityTrap>, SDELoadError> {
+        self.load_proximity_trap()?.collect()
+    }
+
     /// Load 'races' as iterator
     pub fn load_races(&mut self) -> Result<impl Iterator<Item=Result<CharacterRace, SDELoadError>>, SDELoadError> {
         self.load_file::<CharacterRace>("races.jsonl")
@@ -4556,6 +5651,26 @@ impl<R: Read + Seek> SDELoader<R> {
     /// Load 'races' as map
     pub fn load_races_map(&mut self) -> Result<IndexMap<ids::RaceID, CharacterRace>, SDELoadError> {
         self.load_races()?.collect()
+    }
+
+    /// Load `schoolMap` as iterator
+    pub fn load_school_map(&mut self) -> Result<impl Iterator<Item=Result<SchoolMap, SDELoadError>>, SDELoadError> {
+        self.load_file::<SchoolMap>("schoolMap.jsonl")
+    }
+
+    /// Load `schoolMap` as map
+    pub fn load_school_map_map(&mut self) -> Result<IndexMap<ids::SchoolID, ids::StationID>, SDELoadError> {
+        self.load_school_map()?.collect()
+    }
+
+    /// Load `schools` as iterator
+    pub fn load_schools(&mut self) -> Result<impl Iterator<Item=Result<School, SDELoadError>>, SDELoadError> {
+        self.load_file::<School>("schools.jsonl")
+    }
+
+    /// Load `schools` as map
+    pub fn load_schools_map(&mut self) -> Result<IndexMap<ids::SchoolID, School>, SDELoadError> {
+        self.load_schools()?.collect()
     }
 
     /// Load 'shipTreeElements' as iterator
@@ -4588,11 +5703,15 @@ impl<R: Read + Seek> SDELoader<R> {
         self.load_ship_tree_groups()?.collect()
     }
 
+    /// Load `skillPlans` as iterator
+    pub fn load_skill_plans(&mut self) -> Result<impl Iterator<Item=Result<SkillPlan, SDELoadError>>, SDELoadError> {
+        self.load_file::<SkillPlan>("skillPlans.jsonl")
+    }
 
-
-
-
-
+    /// Load `skillPlans` as map
+    pub fn load_skill_plans_map(&mut self) -> Result<IndexMap<u32, SkillPlan>, SDELoadError> {
+        self.load_skill_plans()?.collect()
+    }
 
     /// Load 'skinLicenses' as iterator
     pub fn load_skin_licenses(&mut self) -> Result<impl Iterator<Item=Result<SkinLicense, SDELoadError>>, SDELoadError> {
@@ -4612,6 +5731,106 @@ impl<R: Read + Seek> SDELoader<R> {
     /// Load 'skinMaterials' as map
     pub fn load_skin_materials_map(&mut self) -> Result<IndexMap<ids::SkinMaterialID, SkinMaterial>, SDELoadError> {
         self.load_skin_materials()?.collect()
+    }
+
+    /// Load `skinrComponentCategories` as iterator
+    pub fn load_skinr_component_categories(&mut self) -> Result<impl Iterator<Item=Result<SKINRComponentCategory, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRComponentCategory>("skinrComponentCategories.jsonl")
+    }
+
+    /// Load `skinrComponentCategories` as map
+    pub fn load_skinr_component_categories_map(&mut self) -> Result<IndexMap<ids::SKINRComponentCategoryID, SKINRComponentCategory>, SDELoadError> {
+        self.load_skinr_component_categories()?.collect()
+    }
+
+    /// Load `skinrComponentPointValues` as iterator
+    pub fn load_skinr_component_point_values(&mut self) -> Result<impl Iterator<Item=Result<SKINRComponentPointValues, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRComponentPointValues>("skinrComponentPointValues.jsonl")
+    }
+
+    /// Load `skinrComponentPointValues` as map
+    pub fn load_skinr_component_point_values_map(&mut self) -> Result<IndexMap<ids::SKINRComponentCategoryID, SKINRComponentPointValues>, SDELoadError> {
+        self.load_skinr_component_point_values()?.collect()
+    }
+
+    /// Load `skinrComponentRarities` as iterator
+    pub fn load_skinr_component_rarities(&mut self) -> Result<impl Iterator<Item=Result<SKINRComponentRarity, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRComponentRarity>("skinrComponentRarities.jsonl")
+    }
+
+    /// Load `skinrComponentRarities` as map
+    pub fn load_skinr_component_rarities_map(&mut self) -> Result<IndexMap<u32, SKINRComponentRarity>, SDELoadError> {
+        self.load_skinr_component_rarities()?.collect()
+    }
+
+    /// Load `skinrComponents` as iterator
+    pub fn load_skinr_components(&mut self) -> Result<impl Iterator<Item=Result<SKINRComponent, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRComponent>("skinrComponents.jsonl")
+    }
+
+    /// Load `skinrComponents` as map
+    pub fn load_skinr_components_map(&mut self) -> Result<IndexMap<ids::SKINRComponentID, SKINRComponent>, SDELoadError> {
+        self.load_skinr_components()?.collect()
+    }
+
+    /// Load `skinrSlotCategories` as iterator
+    pub fn load_skinr_slot_categories(&mut self) -> Result<impl Iterator<Item=Result<SKINRSlotCategory, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRSlotCategory>("skinrSlotCategories.jsonl")
+    }
+
+    /// Load `skinrSlotCategories` as map
+    pub fn load_skinr_slot_categories_map(&mut self) -> Result<IndexMap<ids::SKINRSlotCategoryID, SKINRSlotCategory>, SDELoadError> {
+        self.load_skinr_slot_categories()?.collect()
+    }
+
+    /// Load `skinrSlotConfigurations` as iterator
+    pub fn load_skinr_slot_configurations(&mut self) -> Result<impl Iterator<Item=Result<SKINRSlotConfiguration, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRSlotConfiguration>("skinrSlotConfigurations.jsonl")
+    }
+
+    /// Load `skinrSlotConfigurations` as map
+    pub fn load_skinr_slot_configurations_map(&mut self) -> Result<IndexMap<u32, SKINRSlotConfiguration>, SDELoadError> {
+        self.load_skinr_slot_configurations()?.collect()
+    }
+
+    /// Load `skinrSlotNames` as iterator
+    pub fn load_skinr_slot_names(&mut self) -> Result<impl Iterator<Item=Result<SKINRSlotName, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRSlotName>("skinrSlotNames.jsonl")
+    }
+
+    /// Load `skinrSlotNames` as map
+    pub fn load_skinr_slot_names_map(&mut self) -> Result<IndexMap<u32, SKINRSlotName>, SDELoadError> {
+        self.load_skinr_slot_names()?.collect()
+    }
+
+    /// Load `skinrSlots` as iterator
+    pub fn load_skinr_slots(&mut self) -> Result<impl Iterator<Item=Result<SKINRSlot, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRSlot>("skinrSlots.jsonl")
+    }
+
+    /// Load `skinrSlots` as map
+    pub fn load_skinr_slots_map(&mut self) -> Result<IndexMap<u32, SKINRSlot>, SDELoadError> {
+        self.load_skinr_slots()?.collect()
+    }
+
+    /// Load `skinrSlotsToMaterials` as iterator
+    pub fn load_skinr_slots_to_materials(&mut self) -> Result<impl Iterator<Item=Result<SKINRSlotsToMaterials, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRSlotsToMaterials>("skinrSlotsToMaterials.jsonl")
+    }
+
+    /// Load `skinrSlotsToMaterials` as map
+    pub fn load_skinr_slots_to_materials_map(&mut self) -> Result<IndexMap<u32, SKINRSlotsToMaterials>, SDELoadError> {
+        self.load_skinr_slots_to_materials()?.collect()
+    }
+
+    /// Load `skinrTierThresholds` as iterator
+    pub fn load_skinr_tier_thresholds(&mut self) -> Result<impl Iterator<Item=Result<SKINRTierThreshold, SDELoadError>>, SDELoadError> {
+        self.load_file::<SKINRTierThreshold>("skinrTierThresholds.jsonl")
+    }
+
+    /// Load `skinrTierThresholds` as map
+    pub fn load_skinr_tier_thresholds_map(&mut self) -> Result<IndexMap<u32, SKINRTierThreshold>, SDELoadError> {
+        self.load_skinr_tier_thresholds()?.collect()
     }
 
     /// Load 'skins' as iterator
@@ -4654,6 +5873,36 @@ impl<R: Read + Seek> SDELoader<R> {
         self.load_station_services()?.collect()
     }
 
+    /// Load `stationStandingsRestrictions` as iterator
+    pub fn load_station_standings_restrictions(&mut self) -> Result<impl Iterator<Item=Result<StationStandingsRestriction, SDELoadError>>, SDELoadError> {
+        self.load_file::<StationStandingsRestriction>("stationStandingsRestrictions.jsonl")
+    }
+
+    /// Load `stationStandingsRestrictions` as map
+    pub fn load_station_standings_restrictions_map(&mut self) -> Result<IndexMap<ids::FactionID, StationStandingsRestriction>, SDELoadError> {
+        self.load_station_standings_restrictions()?.collect()
+    }
+
+    /// Load `systemDbuffEmitters` as iterator
+    pub fn load_system_dbuff_emitters(&mut self) -> Result<impl Iterator<Item=Result<SystemDynamicbuffEmitter, SDELoadError>>, SDELoadError> {
+        self.load_file::<SystemDynamicbuffEmitter>("systemDbuffEmitters.jsonl")
+    }
+
+    /// Load `systemDbuffEmitters` as map
+    pub fn load_system_dbuff_emitters_map(&mut self) -> Result<IndexMap<ids::TypeID, SystemDynamicbuffEmitter>, SDELoadError> {
+        self.load_system_dbuff_emitters()?.collect()
+    }
+
+    /// Load `systemWideEffects` as iterator
+    pub fn load_system_wide_effects(&mut self) -> Result<impl Iterator<Item=Result<SystemWideEffect, SDELoadError>>, SDELoadError> {
+        self.load_file::<SystemWideEffect>("systemWideEffects.jsonl")
+    }
+
+    /// Load `systemWideEffects` as map
+    pub fn load_system_wide_effects_map(&mut self) -> Result<IndexMap<ids::TypeID, SystemWideEffect>, SDELoadError> {
+        self.load_system_wide_effects()?.collect()
+    }
+
     /// Load 'translationLanguages' as iterator
     pub fn load_translation_languages(&mut self) -> Result<impl Iterator<Item=Result<TranslationLanguage, SDELoadError>>, SDELoadError> {
         self.load_file::<_>("translationLanguages.jsonl")
@@ -4682,6 +5931,16 @@ impl<R: Read + Seek> SDELoader<R> {
     /// Load 'typeDogma' as map
     pub fn load_type_dogma_map(&mut self) -> Result<IndexMap<ids::TypeID, TypeDogma>, SDELoadError> {
         self.load_type_dogma()?.collect()
+    }
+
+    /// Load `typeElements` as iterator
+    pub fn load_type_elements(&mut self) -> Result<impl Iterator<Item=Result<TypeElement, SDELoadError>>, SDELoadError> {
+        self.load_file::<TypeElement>("typeElements.jsonl")
+    }
+
+    /// Load `typeElements` as map
+    pub fn load_type_elements_map(&mut self) -> Result<IndexMap<ids::TypeID, TypeElement>, SDELoadError> {
+        self.load_type_elements()?.collect()
     }
 
     /// Load 'typelist' as iterator
@@ -4716,9 +5975,11 @@ impl<R: Read + Seek> SDELoader<R> {
 
     pub fn full(&mut self) -> Result<SDE_Full, SDELoadError> {
         Ok(SDE_Full {
+            accounting_entry_types: self.load_accounting_entry_types_map()?,
             agent_types: self.load_agent_types_map()?,
             agents_in_space: self.load_agents_in_space_map()?,
             ancestries: self.load_ancestries_map()?,
+            applied_proximity_effects: self.load_applied_proximity_effects_map()?,
             archetypes: self.load_archetypes_map()?,
             bloodlines: self.load_bloodlines_map()?,
             blueprints: self.load_blueprints_map()?,
@@ -4731,6 +5992,8 @@ impl<R: Read + Seek> SDELoader<R> {
             contraband_types: self.load_contraband_types_map()?,
             control_tower_resources: self.load_controltower_resources_map()?,
             corporation_activities: self.load_corporation_activities_map()?,
+            corporation_role_groups: self.load_corporation_role_groups_map()?,
+            corporation_roles: self.load_corporation_roles_map()?,
             dbuff_collections: self.load_dbuff_collections_map()?,
             dogma_attribute_categories: self.load_dogma_attribute_categories_map()?,
             dogma_attributes: self.load_dogma_attributes_map()?,
@@ -4738,12 +6001,23 @@ impl<R: Read + Seek> SDELoader<R> {
             dogma_units: self.load_dogma_units_map()?,
             dungeons: self.load_dungeons_map()?,
             dynamic_item_attributes: self.load_dynamic_item_attributes_map()?,
+            epic_arcs: self.load_epic_arcs_map()?,
+            expert_systems: self.load_expert_systems_map()?,
             factions: self.load_factions_map()?,
+            fighter_abilities: self.load_fighter_abilities_map()?,
+            fighter_abilities_by_type: self.load_fighter_abilities_by_type_map()?,
             freelance_job_schemas: self.load_freelance_job_schemas_map()?,
+            graphic_material_sets: self.load_graphic_material_sets_map()?,
             graphics: self.load_graphics_map()?,
             groups: self.load_groups_map()?,
             icons: self.load_icons_map()?,
+            industry_activities: self.load_industry_activities_map()?,
+            industry_assembly_lines: self.load_industry_assembly_lines_map()?,
+            industry_installation_types: self.load_industry_installation_types_map()?,
+            industry_modifier_sources: self.load_industry_modifier_sources_map()?,
+            industry_target_filters: self.load_industry_target_filters_map()?,
             landmarks: self.load_landmarks_map()?,
+            link_with_ship: self.load_link_with_ship_map()?,
             map_asteroid_belts: self.load_asteroid_belts_map()?,
             map_constellations: self.load_constellations_map()?,
             map_moons: self.load_moons_map()?,
@@ -4757,31 +6031,51 @@ impl<R: Read + Seek> SDELoader<R> {
             masteries: self.load_masteries_map()?,
             mercenary_tactical_operations: self.load_merc_tactical_operations_map()?,
             meta_groups: self.load_meta_groups_map()?,
+            metenox_moon_drill: self.load_metenox_moon_drill_map()?,
             military_campaigns: self.load_military_campaigns_map()?,
             military_campaign_objectives: self.load_military_campaign_objectives_map()?,
             missions: self.load_missions_map()?,
+            notification_types: self.load_notification_types_map()?,
             npc_characters: self.load_npc_characters_map()?,
             npc_corporation_divisions: self.load_npc_corporation_divisions_map()?,
             npc_corporations: self.load_npc_corporations_map()?,
             npc_stations: self.load_npc_stations_map()?,
             planet_resources: self.load_planet_resources_map()?,
             planet_schematics: self.load_planet_schematics_map()?,
+            proximity_trap: self.load_proximity_trap_map()?,
             races: self.load_races_map()?,
+            school_map: self.load_school_map_map()?,
+            schools: self.load_schools_map()?,
             ship_tree_elements: self.load_ship_tree_elements_map()?,
             ship_tree_factions: self.load_ship_tree_factions_map()?,
             ship_tree_groups: self.load_ship_tree_groups_map()?,
+            skill_plans: self.load_skill_plans_map()?,
             skin_licenses: self.load_skin_licenses_map()?,
             skin_materials: self.load_skin_materials_map()?,
+            skinr_component_categories: self.load_skinr_component_categories_map()?,
+            skinr_component_point_values: self.load_skinr_component_point_values_map()?,
+            skinr_component_rarities: self.load_skinr_component_rarities_map()?,
+            skinr_components: self.load_skinr_components_map()?,
+            skinr_slot_categories: self.load_skinr_slot_categories_map()?,
+            skinr_slot_configurations: self.load_skinr_slot_configurations_map()?,
+            skinr_slot_names: self.load_skinr_slot_names_map()?,
+            skinr_slots: self.load_skinr_slots_map()?,
+            skinr_slots_to_materials: self.load_skinr_slots_to_materials_map()?,
+            skinr_tier_thresholds: self.load_skinr_tier_thresholds_map()?,
             skins: self.load_skins_map()?,
             sovereignty_upgrades: self.load_sovereignty_upgrades_map()?,
             station_operations: self.load_station_operations_map()?,
             station_services: self.load_station_services_map()?,
+            station_standings_restrictions: self.load_station_standings_restrictions_map()?,
+            system_dbuff_emitters: self.load_system_dbuff_emitters_map()?,
+            system_wide_effects: self.load_system_wide_effects_map()?,
             translation_languages: self.load_translation_languages_list()?,
             type_bonus: self.load_type_bonuses_map()?,
             type_dogma: self.load_type_dogma_map()?,
+            type_elements: self.load_type_elements_map()?,
             type_lists: self.load_type_lists_map()?,
             type_materials: self.load_type_materials_map()?,
-            types: self.load_types_map()?,
+            types: self.load_types_map()?
         })
     }
 }

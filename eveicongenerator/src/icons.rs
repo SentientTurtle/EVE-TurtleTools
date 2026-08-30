@@ -2,17 +2,18 @@ use evesharedcache::cache::{CacheError, SharedCache};
 use evestaticdata::sde::load::{SDELoadError, SDELoader, TypeList};
 use evestaticdata::types::{ids, values};
 use image::imageops::FilterType;
-use image::{DynamicImage, ImageFormat, ImageReader, imageops};
+use image::{imageops, DynamicImage, GrayAlphaImage, ImageFormat, ImageReader, LumaA};
 use image_blend::BufferBlend;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::fs::File;
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::io::{Cursor, Write};
 use std::path::{Path};
-use std::{fs, io};
+use std::{io};
+use fs_err as fs;
+use fs_err::File;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
@@ -958,23 +959,19 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                                 if !cache.has_resource(&resource) { continue; }
                                 let resource_path = cache.path_of(&resource)?;
 
-                                let mut image = ImageReader::open(resource_path)?.with_guessed_format()?.decode()?.to_rgba8();
+                                let image = ImageReader::open(resource_path)?.with_guessed_format()?.decode()?.to_rgba8();
                                 let (width, height) = image.dimensions();
+                                let mut out = GrayAlphaImage::new(width, height);
 
                                 for y in 0..height {
                                     for x in 0..width {
-                                        let mut p = *image.get_pixel(x, y);
-                                        // Copy one of the R/G/B channels onto alpha, set R/G/B to 255
-                                        p[3] = p[0];
-                                        p[0] = 255;
-                                        p[1] = 255;
-                                        p[2] = 255;
-
-                                        image.put_pixel(x, y, p);
+                                        let p = *image.get_pixel(x, y);
+                                        // Copy RED channel onto alpha, and set Luma to 255
+                                        out.put_pixel(x, y, LumaA([255, p[0]]));
                                     }
                                 }
 
-                                image.write_to(&mut buf, ImageFormat::Png)?;
+                                out.write_to(&mut buf, ImageFormat::Png)?;
 
                                 writer.start_file(format!("{}.png", type_id), FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
                                 std::io::copy(&mut buf.get_ref().as_slice(), &mut writer)?;

@@ -11,7 +11,7 @@ use axum::routing::get;
 use evestaticdata::sde::update::SdeVersion;
 use tokio::sync::RwLock;
 use zipslash::parse::ParseOpts;
-use zipslash::{RepackOpts, Repacker};
+use zipslash::repack::{RepackOpts, Repacker};
 use zipslash::range_read::SliceRangeReader;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -22,9 +22,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let repacker = Repacker::load_archive(&SliceRangeReader(include_bytes!("./empty.zip")), &ParseOpts::default())?;
 
-    let arc = Arc::new(RwLock::new((repacker, SdeVersion::sde { buildNumber: 0, releaseDate: "".to_string() })));
+    let arc = Arc::new(RwLock::new((repacker, SdeVersion::sde { buildNumber: 0, releaseDate: None })));
     let arc2 = arc.clone();
-
 
     rt.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_mins(15));

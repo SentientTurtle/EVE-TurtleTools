@@ -83,7 +83,6 @@ fn parse_attrs(attrs: &mut Vec<Attribute>) -> Result<(TypeKind, Vec<String>, Fla
                 retained.push(attr.clone());
             }
             Meta::List(list) if list.path.is_ident("cfg_attr") && list.tokens.to_string().starts_with("feature=\"docs_export\", doc_sde") => {
-
                 let list = if let Some(proc_macro2::TokenTree::Group(group)) = list.tokens.clone().into_iter().last() {
                     group.stream()
                 } else {
@@ -256,36 +255,43 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
             let mut outfile = File::create("sde cheatsheet.yaml").unwrap();
 
             let intro = "\
+            ---\n\
             # Turtle's Cheat Sheet for the EVE Online 'Static Data Export'\n\
             #\n\
-            # Each file in the Static Data Export is a mapping of the file's datatype to it's ID\n\
-            # Field names with a trailing question mark `?` indicate an optional/nullable field that may not be present\n\
+            # Each file in the Static Data Export is a mapping of the file's datatype to it's ID.\n\
+            # Field names with a trailing question mark `?` indicate an optional/nullable field that may not be present.\n\
+            # YAML lists (`[ type ]` or `- ...`) indicate lists and mappings of zero or more entries, with the specified type.\n\
+            # Mappings are described as lists of key-value pairs.\n\
+            # Specialized subtypes (such as IDs) are given in `supertype=subtype` notation. `integer=TypeID` indicates an integer representing a TypeID.\n\
             #\n\
             # This cheat sheet is derived from code comments (https://github.com/SentientTurtle/EVE-3rd-party-dev-tools), and is structured accordingly.\n\
             # There will be more redundancy than conventional documentation. Some of the data structure is opinionated.\n\
             # Only the structure and types are validated automatically, the docs may be incomplete, shallowly researched, or outdated.\n\
             #\n\
-            # This file is *NOT* valid YAML. Do not attempt to parse it, your parser will explode.\n\
-            # If you have a good reason why it should become YAML-compliant or have an alternate notation for something, feel free to get in touch or open an issue in the repo above.\n\
+            # This file is now valid YAML. Schema subject to change without notice.\n\
+            #\n\
+            # This file is not designed to be used as \"context\" for AI tools and has no consideration for token cost.
             \n\
-            # This file *may* be used as \"context\" for AI tools. Beware that it is a large file. I am not responsible if you delete your own wallet.
             \n\
-            \n\
-            # Common Data Types #\n\
             ";
 
             writeln!(outfile, "{}", intro).unwrap();
 
-            fn write_item(outfile: &mut File, type_map: &HashMap<String, &(DocItem, TypeKind, Vec<String>)>, indent: usize, skip_type: bool, skip_key: bool, item: &DocItem, kind: &TypeKind, docstr: &Vec<String>) -> () {
+            fn write_item(outfile: &mut File, type_map: &HashMap<String, &(DocItem, TypeKind, Vec<String>)>, indent: usize, skip_type: bool, skip_key: bool, mut add_sequence_entry: bool, item: &DocItem, kind: &TypeKind, docstr: &Vec<String>) -> () {
                 if !skip_type {
                     writeln!(outfile).unwrap();
                     if let TypeKind::SdeFile(filename) = kind {
-                        write!(outfile, "{:indent$}## SDE File: {}.jsonl {}.yaml\n\n", "", filename, filename, indent = indent).unwrap();
+                        write!(outfile, "{:indent$}# {}.jsonl\n#\n", "", filename, indent = indent).unwrap();
                     }
                     for line in docstr {
                         writeln!(outfile, "{:indent$}# {}", "", line.trim(), indent = indent).unwrap();
                     }
                 }
+
+                if add_sequence_entry {
+                    assert!(skip_type);
+                }
+
                 match item {
                     DocItem::Enum(_, name, variants) => {
                         let discriminant_datatype = if let Some((_, Some(_), _, _)) = variants.first() {
@@ -295,16 +301,19 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                         };
 
                         if !skip_type {
-                            writeln!(outfile, "{:indent$}{}: !!oneOf({})", "", name, discriminant_datatype, indent = indent).unwrap();
+                            writeln!(outfile, "{:indent$}{}:\n{:indent2$}!!oneOf({})", "", name, "", discriminant_datatype, indent=indent, indent2=indent+2).unwrap();
                         } else {
-                            writeln!(outfile, " !!oneOf({})", discriminant_datatype).unwrap();
+                            if add_sequence_entry {
+                                panic!("add_sequence_entry unsupported on enums!")
+                            }
+                            writeln!(outfile, "\n{:indent$}!!oneOf({})", "", discriminant_datatype, indent=indent+2).unwrap();
                         }
                         for (variant, discriminant, variant_docs, _flags) in variants {
                             for line in variant_docs {
                                 writeln!(outfile, "{:indent$}# {}", "", line.trim(), indent=indent + 4).unwrap();
                             }
                             if let Some(discriminant) = discriminant {
-                                writeln!(outfile, "{:indent$}- {}={}", "", variant, discriminant, indent=indent + 2).unwrap();
+                                writeln!(outfile, "{:indent$}- {} = {}", "", variant, discriminant, indent=indent + 2).unwrap();
                             } else {
                                 writeln!(outfile, "{:indent$}- {}", "", variant, indent=indent + 2).unwrap();
                             }
@@ -325,7 +334,8 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                                 writeln!(outfile, "{:indent$}# {}", "", line.trim(), indent=indent + 4).unwrap();
                             }
 
-                            write_field_type(outfile, type_map, indent, field.to_string(), field_type, &mut flags);
+                            write_field_type(outfile, type_map, indent, field.to_string(), field_type, &mut flags, add_sequence_entry);
+                            add_sequence_entry = false;
                         }
                     },
                     DocItem::Override(_, doc_override) => {
@@ -338,7 +348,7 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                     }
                 }
             }
-            fn write_field_type(outfile: &mut File, type_map: &HashMap<String, &(DocItem, TypeKind, Vec<String>)>, indent: usize, field_name: String, field_type: &syn::Type, flags: &mut Flags) {
+            fn write_field_type(outfile: &mut File, type_map: &HashMap<String, &(DocItem, TypeKind, Vec<String>)>, indent: usize, field_name: String, field_type: &syn::Type, flags: &mut Flags, add_sequence_entry: bool) {
                 let mut _type_alias = None; // Hold ownership of any alias generated below
                 if let Some(alias) = flags.type_alias.take() {  // Unset alias if present, as this function is recursive and we handle the type alias in the current iteration
                     match syn::parse_str::<syn::Type>(&alias) {
@@ -363,23 +373,36 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                     assert!(path.segments.len() <= 2, "{:?}", path);
                     if let Some(PathSegment { ident, arguments }) = path.segments.first() {
                         match &*ident.to_string() {
-                            s @ ("f64" | "i32" | "u32" | "i64" | "u64" | "bool" | "String" | "ids" | "values" | "EVEUnit") => {
-                                write!(outfile, "{:indent$}", "", indent = indent + 4).unwrap();
+                            s @ ("f64" | "i32" | "u32" | "i64" | "u64" | "bool" | "String" | "ids" | "uuids" | "values" | "EVEUnit") => {
+                                if add_sequence_entry {
+                                    write!(outfile, "{:indent$}- ", "", indent = indent + 2).unwrap();
+                                } else {
+                                    write!(outfile, "{:indent$}", "", indent = indent + 4).unwrap();
+                                }
                                 if flags.rename.as_deref() == Some("_key") { write!(outfile, "!!key ").unwrap() }
-                                write!(outfile, "{}{}: ", field_name, if flags.nullable { "?" } else { "" }).unwrap();
 
                                 match &flags.arity {
-                                    Arity::Single => { /* NO-OP */}
-                                    Arity::List => write!(outfile, "[ ").unwrap(),
+                                    Arity::Single => {
+                                        write!(outfile, "{}{}: ", field_name, if flags.nullable { "?" } else { "" }).unwrap();
+                                        write_simple_type(outfile, path, s).expect("simple_type must always be valid here");
+                                        writeln!(outfile).unwrap();
+                                    }
+                                    Arity::List => {
+                                        write!(outfile, "{}{}: [ ", field_name, if flags.nullable { "?" } else { "" }).unwrap();
+                                        write_simple_type(outfile, path, s).expect("simple_type must always be valid here");
+                                        writeln!(outfile, " ]").unwrap();
+                                    }
                                     Arity::Map(key) => {
-                                        write!(outfile, "{{ ").unwrap();
+                                        write!(outfile, "{}{}:\n", field_name, if flags.nullable { "?" } else { "" }).unwrap();
 
                                         #[allow(unused_qualifications)]
                                         if let syn::Type::Path(TypePath { qself: Option::None, path: key_path }) = key {
                                             assert!(key_path.segments.len() <= 2, "{:?}", key_path);
                                             if let Some(PathSegment { ident: key_ident, .. }) = key_path.segments.first() {
+                                                write!(outfile, "{:indent$}- ", "", indent = indent + 6).unwrap();
                                                 write_simple_type(outfile, key_path, &key_ident.to_string())
                                                     .expect("non-simple map key!"); // TODO: Better error
+                                                write!(outfile, ": ").unwrap();
                                             } else {
                                                 todo!("Type without segments in path!?")
                                             }
@@ -387,24 +410,16 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                                             todo!("Non-path type: {:?}", field_type)
                                         }
 
-                                        write!(outfile, ": ").unwrap();
+                                        write_simple_type(outfile, path, s).expect("simple_type must always be valid here");
+                                        write!(outfile, "\n{:indent$}- ...\n", "", indent = indent + 6).unwrap()
                                     }
                                 }
-
-                                write_simple_type(outfile, path, s).expect("simple_type must always be valid here");
-
-                                match &flags.arity {
-                                    Arity::Single => { /* NO-OP */ }
-                                    Arity::List => write!(outfile, " ]").unwrap(),
-                                    Arity::Map(_) => write!(outfile, " }}").unwrap(),
-                                }
-                                writeln!(outfile).unwrap();
                             }
                             "Option" => {
                                 if let PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) = arguments {
                                     if let Some(GenericArgument::Type(t)) = args.first() {
                                         flags.nullable = true;
-                                        write_field_type(outfile, type_map, indent, field_name, t, flags);
+                                        write_field_type(outfile, type_map, indent, field_name, t, flags, add_sequence_entry);
                                     } else {
                                         todo!("Option with non-type argument")
                                     }
@@ -416,7 +431,7 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                                 if let PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) = arguments {
                                     if let Some(GenericArgument::Type(t)) = args.first() {
                                         flags.arity = Arity::List;
-                                        write_field_type(outfile, type_map, indent, field_name, t, flags);
+                                        write_field_type(outfile, type_map, indent, field_name, t, flags, add_sequence_entry);
                                     } else {
                                         todo!("Vec with non-type argument")
                                     }
@@ -428,7 +443,7 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                                 if let PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) = arguments {
                                     if let (Some(GenericArgument::Type(k)), Some(GenericArgument::Type(v))) = (args.get(0), args.get(1)) {
                                         flags.arity = Arity::Map(k.clone());
-                                        write_field_type(outfile, type_map, indent, field_name, v, flags);
+                                        write_field_type(outfile, type_map, indent, field_name, v, flags, add_sequence_entry);
                                     } else {
                                         todo!("{:?}", args)
                                     }
@@ -439,20 +454,24 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                             s => {
                                 match type_map.get(s) {
                                     Some((_, TypeKind::CommonType | TypeKind::ExternalType, _)) => {
-                                        std::write!(outfile, "{:indent$}", "", indent = indent + 4).unwrap();
+                                        if add_sequence_entry {
+                                            write!(outfile, "{:indent$}- ", "", indent = indent + 2).unwrap();
+                                        } else {
+                                            write!(outfile, "{:indent$}", "", indent = indent + 4).unwrap();
+                                        }
                                         if flags.rename.as_deref() == Some("_key") { write!(outfile, "!!key ").unwrap() }
-                                        write!(outfile, "{}{}: ", field_name, if flags.nullable { "?" } else { "" }).unwrap();
 
                                         match &flags.arity {
-                                            Arity::Single => { /* NO OP */ }
-                                            Arity::List => write!(outfile, "[ ").unwrap(),
+                                            Arity::Single => writeln!(outfile, "{}{}: {}", field_name, if flags.nullable { "?" } else { "" }, s).unwrap(),
+                                            Arity::List => writeln!(outfile, "{}{}: [ {} ]", field_name, if flags.nullable { "?" } else { "" }, s).unwrap(),
                                             Arity::Map(key) => {
-                                                write!(outfile, "{{ ").unwrap();
+                                                write!(outfile, "{}{}:\n", field_name, if flags.nullable { "?" } else { "" }).unwrap();
 
                                                 #[allow(unused_qualifications)]
                                                 if let syn::Type::Path(TypePath { qself: Option::None, path: key_path }) = key {
                                                     assert!(key_path.segments.len() <= 2, "{:?}", key_path);
                                                     if let Some(PathSegment { ident: key_ident, .. }) = key_path.segments.first() {
+                                                        write!(outfile, "{:indent$}- ", "", indent = indent + 6).unwrap();
                                                         write_simple_type(outfile, key_path, &key_ident.to_string())
                                                             .expect("non-simple map key!"); // TODO: Better error
                                                         write!(outfile, ": ").unwrap();
@@ -462,65 +481,54 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                                                 } else {
                                                     todo!("Non-path type: {:?}", field_type)
                                                 }
+
+                                                writeln!(outfile, "{}\n{:indent$}- ...", s, "", indent = indent + 6).unwrap()
                                             }
                                         }
-
-                                        write!(outfile, "{}", s).unwrap();
-
-                                        match &flags.arity {
-                                            Arity::Single => { /* NO-OP */ }
-                                            Arity::List => write!(outfile, " ]").unwrap(),
-                                            Arity::Map(_) => write!(outfile, " }}").unwrap(),
-                                        }
-                                        writeln!(outfile).unwrap();
                                     },
                                     Some((_, TypeKind::InternalType, _)) => {
-                                        std::write!(outfile, "{:indent$}", "", indent = indent + 4).unwrap();
+                                        if add_sequence_entry {
+                                            write!(outfile, "{:indent$}- ", "", indent = indent + 2).unwrap();
+                                        } else {
+                                            write!(outfile, "{:indent$}", "", indent = indent + 4).unwrap();
+                                        }
                                         if flags.rename.as_deref() == Some("_key") { write!(outfile, "!!key ").unwrap() }
                                         write!(outfile, "{}{}:", field_name, if flags.nullable { "?" } else { "" }).unwrap();
 
                                         let mut plus_indent = 0;
 
-                                        match &flags.arity {
-                                            Arity::Single => { /* NO-OP */ }
-                                            Arity::List => write!(outfile, " [").unwrap(),
-                                            Arity::Map(key) => {
-                                                write!(outfile, " {{\n").unwrap();
+                                        if let Arity::Map(key) = &flags.arity {
+                                            #[allow(unused_qualifications)]
+                                            if let syn::Type::Path(TypePath { qself: Option::None, path: key_path }) = key {
+                                                assert!(key_path.segments.len() <= 2, "{:?}", key_path);
+                                                if let Some(PathSegment { ident: key_ident, .. }) = key_path.segments.first() {
+                                                    write!(outfile, "\n{:indent$}- ", "", indent = indent + 6).unwrap();
+                                                    write_simple_type(outfile, key_path, &key_ident.to_string())
+                                                        .expect("non-simple map key!"); // TODO: Better error
+                                                    write!(outfile, ":").unwrap();
 
-                                                #[allow(unused_qualifications)]
-                                                if let syn::Type::Path(TypePath { qself: Option::None, path: key_path }) = key {
-                                                    assert!(key_path.segments.len() <= 2, "{:?}", key_path);
-                                                    if let Some(PathSegment { ident: key_ident, .. }) = key_path.segments.first() {
-                                                        std::write!(outfile, "{:indent$}", "", indent = indent + 8).unwrap();
-                                                        write_simple_type(outfile, key_path, &key_ident.to_string())
-                                                            .expect("non-simple map key!"); // TODO: Better error
-                                                        write!(outfile, ":").unwrap();
-
-                                                        plus_indent += 4;
-                                                    } else {
-                                                        todo!("Type without segments in path!?")
-                                                    }
+                                                    plus_indent += 4;
                                                 } else {
-                                                    todo!("Non-path type: {:?}", field_type)
+                                                    todo!("Type without segments in path!?")
                                                 }
+                                            } else {
+                                                todo!("Non-path type: {:?}", field_type)
                                             }
                                         }
 
                                         if let Some((inner_item, inner_kind, inner_docs)) = type_map.get(s) {
-                                            write_item(outfile, type_map, indent + 4 + plus_indent, true, matches!(flags.arity, Arity::Map(_)), inner_item, inner_kind, inner_docs)
+                                            write_item(outfile, type_map, indent + 4 + plus_indent, true, matches!(flags.arity, Arity::Map(_)), matches!(flags.arity, Arity::List), inner_item, inner_kind, inner_docs)
                                         } else {
                                             panic!("unknown internal type: {}", s)
                                         }
 
                                         match &flags.arity {
                                             Arity::Single => { /* NO-OP */ }
-                                            Arity::List => write!(outfile, "{:indent$}]\n", "", indent = indent + 4).unwrap(),
-                                            Arity::Map(_) => write!(outfile, "{:indent$}}}\n", "", indent = indent + 4).unwrap(),
+                                            Arity::List | Arity::Map(_) => write!(outfile, "{:indent$}- ...\n", "", indent = indent + 6).unwrap()
                                         }
-                                        // writeln!(outfile).unwrap();
                                     }
                                     _ => {
-                                        writeln!(outfile, "{:indent$}{}{}: UNKNOWN TYPE: {}", "", field_name, if flags.nullable { "?" } else { "" }, s, indent = indent + 4).unwrap()
+                                        panic!("Unknown type: {}", s);
                                     },
                                 }
                             }
@@ -541,26 +549,31 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
                     "String" => write!(outfile, "string").unwrap(),
                     "ids" => {
                         if path.segments.len() == 2 {
-                            write!(outfile, "{} (integer)", path.segments[1].ident).unwrap()
+                            write!(outfile, "integer={}", path.segments[1].ident).unwrap()
                         } else {
                             todo!("ids:: without 2nd segment")
                         }
                     }
-                    "EVEUnit" => write!(outfile, "UnitID (integer)").unwrap(),
+                    "uuids" => {
+                        if path.segments.len() == 2 {
+                            write!(outfile, "string={}", path.segments[1].ident).unwrap()
+                        } else {
+                            todo!("uuids:: without 2nd segment")
+                        }
+                    }
+                    "EVEUnit" => write!(outfile, "integer:UnitID").unwrap(),
                     "values" => {
                         if path.segments.len() == 2 {
                             let value_type = path.segments[1].ident.to_string();
 
-                            let description = match &*value_type {
-                                "SkillLevel" => " (integer [1, 5])",
-                                "MetaLevel" => " (integer)",
-                                "CacheResource" => "",
+                            let super_type = match &*value_type {
+                                "SkillLevel" | "MetaLevel" | "TechLevel" => "integer",
+                                "CacheResource" => "string",
                                 _ => todo!("Unknown value:: type `{}`", value_type)
                             };
-
-                            write!(outfile, "{}{}", value_type, description).unwrap()
+                            write!(outfile, "{}={}", super_type, value_type).unwrap()
                         } else {
-                            todo!("ids:: without 2nd segment")
+                            todo!("values:: without 2nd segment")
                         }
                     }
                     _ => return Err(())
@@ -570,19 +583,23 @@ pub fn doc_export(_args: proc_macro::TokenStream, input: proc_macro::TokenStream
 
             let map: HashMap<String, &(DocItem, TypeKind, Vec<String>)> = items.iter().map(|item| (item.0.ident().to_string(), item)).collect();
             // Write common types first
+            writeln!(outfile, "# Common Data Types #\n").unwrap();
             for (item, kind, docstr) in &items {
                 if let TypeKind::CommonType = kind {
-                    write_item(&mut outfile, &map, 0, false, false, item, kind, docstr);
+                    write_item(&mut outfile, &map, 0, false, false, false, item, kind, docstr);
                     writeln!(outfile).unwrap();
                 }
             }
 
+            writeln!(outfile, "\n# SDE File Data Types #\n").unwrap();
             for (item, kind, docstr) in &items {
                 if let TypeKind::SdeFile(_) | TypeKind::ExternalType = kind {
-                    write_item(&mut outfile, &map, 0, false, false, item, kind, docstr);
+                    write_item(&mut outfile, &map, 0, false, false, false, item, kind, docstr);
                     writeln!(outfile).unwrap();
                 }
             }
+
+            write!(outfile, "\n... # End of document #").unwrap();
 
             module.to_token_stream().into()
         },

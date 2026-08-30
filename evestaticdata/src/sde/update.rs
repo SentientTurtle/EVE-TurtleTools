@@ -5,12 +5,11 @@ use std::fs::File;
 use std::path::Path;
 use std::{fs, io};
 use std::fmt::{Display, Formatter};
-use zip::ZipArchive;
 
 pub const VERSION_URL: &'static str = "https://developers.eveonline.com/static-data/tranquility/latest.jsonl";
 pub const SDE_URL: &'static str = "https://developers.eveonline.com/static-data/eve-online-static-data-latest-jsonl.zip";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "_key")]
 pub enum SdeVersion {
     sde { buildNumber: u32, releaseDate: Option<String> }
@@ -18,7 +17,7 @@ pub enum SdeVersion {
 
 impl SdeVersion {
     pub fn from_sde_zip<P: AsRef<Path>>(path: P) -> Result<SdeVersion, io::Error> {
-        let mut archive = ZipArchive::new(File::open(path)?).map_err(io::Error::other)?;
+        let mut archive = zip::ZipArchive::new(File::open(path)?).map_err(io::Error::other)?;
         serde_json::from_reader(archive.by_name("_sde.jsonl").map_err(io::Error::other)?).map_err(io::Error::other)
     }
 

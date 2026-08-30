@@ -24,7 +24,7 @@ pub mod ids {
     pub type SoundID = u32;
     pub type WormholeClassID = u32;
     pub type LandmarkID = u32;
-    pub type WarfareBuffID = u32;
+    pub type DynamicBuffID = u32;
     pub type CareerID = u32;
     pub type SchoolID = u32;
     pub type SpecialtyID = u32;
@@ -44,10 +44,20 @@ pub mod ids {
     pub type TypeListID = u32;
     pub type EpicArcID = u32;
     pub type MissionID = u32;
-
     pub type ShipTreeElementID = u32;
     pub type ShipTreeGroupID = u32;
     pub type SKINRComponentCategoryID = u32;
+    pub type SKINRComponentRarity = u32;
+    pub type SKINRComponentID = u32;
+    pub type SKINRSlotCategoryID = u32;
+    pub type AccountingEntryTypeID = u32;
+    pub type CorporationRoleID = u32;
+    pub type CorporationRoleGroupID = u32;
+    pub type FighterAbilityID = u32;
+    pub type IndustryAssemblyLineID = u32;
+    pub type IndustryFilterID = u32;
+    pub type NotificationTypeID = u32;
+    pub type CareerPathID = u32;
 
     // ItemIDs
     pub type ItemID = u32;
@@ -88,6 +98,9 @@ pub mod values {
 
     /// Range of `1..???` TODO
     pub type MetaLevel = u8;
+
+    /// Range of `1..=10`, nominally `1`, `2`, or `3`
+    pub type TechLevel = u8;
 
     /// SharedCache resource
     pub type CacheResource = String;

@@ -5,8 +5,7 @@ pub const CRATE_REPO: &'static str = env!("CARGO_PKG_REPOSITORY");
 use crate::icons::{IconBuildData, IconConfig, IconError, OutputMode};
 use evesharedcache::cache::CacheDownloader;
 use std::time::Instant;
-use std::{fs, io};
-use std::fs::File;
+use fs_err as fs;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use clap::{Arg, ArgAction, Command};
@@ -16,7 +15,7 @@ use evestaticdata::sde::load::SDELoader;
 
 pub mod icons;
 
-static LOG_FILE: OnceLock<File> = OnceLock::new();
+static LOG_FILE: OnceLock<fs::File> = OnceLock::new();
 
 fn main() {
     match do_main() {
@@ -266,7 +265,7 @@ fn do_main() -> Result<(), IconError> {
             if !fs::exists(out)? {
                 fs::create_dir_all(out)?;
             } else if fs::metadata(out)?.is_file() {
-                Err(io::Error::other(format!("Output must be a directory! ({})", out.to_string_lossy())))?;
+                Err(std::io::Error::other(format!("Output must be a directory! ({})", out.to_string_lossy())))?;
             }
             vec![OutputMode::Web {
                 out,
@@ -332,7 +331,7 @@ fn do_main() -> Result<(), IconError> {
     };
 
     if let Some(log_path) = arg_matches.get_one::<PathBuf>("logfile") {
-        let mut opts = File::options();
+        let mut opts = fs::File::options();
         if arg_matches.get_flag("append_log") {
             opts.create(true).append(true);
         } else {

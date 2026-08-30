@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-tokio = { version = "1.48.0", features = ["net", "rt", "macros"] }
-axum = "0.8.7"
+tokio = { version = "1.53.1", features = ["net", "rt", "macros"] }
+axum = "0.8.9"
 zipslash = { path = "../../zipslash" }  # Swap this for `git = "https://github.com/SentientTurtle/ZipSlash.git"` if you've forked/cloned the repo. Sorry, cargo won't let me specify both and use path if present
-evestaticdata = { path = "../evestaticdata" }
+evestaticdata = { path = "../evestaticdata", features = ["sde_update"] }

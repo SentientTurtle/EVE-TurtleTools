@@ -11,9 +11,10 @@ evestaticdata = { path = "../evestaticdata", features = ["sde_update", "sde_load
 zip = "8.6.0"
 image = "0.25.10"
 image-blend = "0.1.7"
-clap = "4.6.1"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
+clap = "4.6.6"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 chrono = "0.4.45"
 # Intentionally not the RustCrypto one. We don't need all the additional cruft RustCrypto adds.
-md5 = "0.8.0"
+md5 = "0.8.1"
+fs-err = "3.3.1"
