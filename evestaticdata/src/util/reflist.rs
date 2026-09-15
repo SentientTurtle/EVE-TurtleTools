@@ -1,19 +1,27 @@
 use crate::types::ids::{TypeID, GroupID, CategoryID};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct TypeList<'a> {
+#[cfg_attr(feature = "export_hardcoded", derive(serde::Serialize))]
+pub struct RefList<'a> {
+    pub name: &'a str,
+    #[cfg_attr(feature = "export_hardcoded", serde(rename="includedTypeIDs", skip_serializing_if="<[TypeID]>::is_empty"))]
     pub included_types: &'a [TypeID],
+    #[cfg_attr(feature = "export_hardcoded", serde(rename="excludedTypeIDs", skip_serializing_if="<[TypeID]>::is_empty"))]
     pub excluded_types: &'a [TypeID],
+    #[cfg_attr(feature = "export_hardcoded", serde(rename="includedGroupIDs", skip_serializing_if="<[GroupID]>::is_empty"))]
     pub included_groups: &'a [GroupID],
+    #[cfg_attr(feature = "export_hardcoded", serde(rename="excludedGroupIDs", skip_serializing_if="<[GroupID]>::is_empty"))]
     pub excluded_groups: &'a [GroupID],
+    #[cfg_attr(feature = "export_hardcoded", serde(rename="includedCategoryIDs", skip_serializing_if="<[CategoryID]>::is_empty"))]
     pub included_categories: &'a [CategoryID],
+    #[cfg_attr(feature = "export_hardcoded", serde(rename="excludedCategoryIDs", skip_serializing_if="<[CategoryID]>::is_empty"))]
     pub excluded_categories: &'a [CategoryID],
 }
 
-impl<'a> TypeList<'a> {
-    pub const fn empty() -> Self {
-        TypeList {
+impl<'a> RefList<'a> {
+    pub const fn with_name(name: &'a str) -> Self {
+        RefList {
+            name,
             included_types: &[],
             excluded_types: &[],
             included_groups: &[],
@@ -38,6 +46,22 @@ impl<'a> TypeList<'a> {
     pub fn includes<F: FnOnce(TypeID) -> (GroupID, CategoryID)>(&self, type_id: TypeID, f: F) -> bool {
         let (group_id, category_id) = f(type_id);
         self.includes_type(type_id, group_id, category_id)
+    }
+
+    #[cfg(feature = "sde_load")]
+    pub fn to_typelist(self) -> crate::sde::load::TypeList {
+        crate::sde::load::TypeList {
+            typeListID: 0,
+            displayName: None,
+            displayDescription: None,
+            name: "".to_string(),
+            includedTypeIDs: vec![],
+            excludedTypeIDs: vec![],
+            includedGroupIDs: vec![],
+            excludedGroupIDs: vec![],
+            includedCategoryIDs: vec![],
+            excludedCategoryIDs: vec![],
+        }
     }
 
     #[allow(clippy::needless_lifetimes)]

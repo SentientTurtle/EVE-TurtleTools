@@ -1,27 +1,22 @@
 use std::error::Error;
-use std::fs::File;
-use std::time::Instant;
-use evestaticdata::sde::load::{SDELoader};
+
 
 #[allow(unreachable_code)]
 pub fn main() -> Result<(), Box<dyn Error>> {
-    return Ok(());
-
-    let start = Instant::now();
-
-    let mut loader = SDELoader::new(File::open("./temp/sde.zip")?)?;
-    let full = loader.full()?;
-
-    let elapsed = start.elapsed().as_secs_f64();
-    println!("Took: {}s", elapsed);
-
-    #[cfg(all(feature = "sde_update", feature="sde_load"))] {
+    #[cfg(all(feature = "sde_update", feature="sde_diff"))] {
+        use std::ffi::OsString;
         use std::fs;
 
         let mut version = evestaticdata::sde::update::update_sde("./temp/sde.zip")?;
-        println!("{}", version);
-        let full = evestaticdata::sde::load::SDELoader::new(fs::File::open("./temp/sde.zip")?)?.full()?;
-        drop(full);
+
+        // Do not download any SDE files if the most recent diff is present
+        let suffix = OsString::from(format!("{}.zip", version.build_number()));
+        for entry in fs::read_dir("./temp/diff/out")? {
+            let entry = entry?;
+            if entry.file_name().as_encoded_bytes().ends_with(suffix.as_encoded_bytes()) {
+                return Ok(())
+            }
+        }
 
         version.download_sde("./temp/diff/latest.zip")?;
         let mut latest_build_number = version.build_number();
@@ -43,7 +38,6 @@ pub fn main() -> Result<(), Box<dyn Error>> {
             latest_build_number = prev_build_number;
         }
     }
-
 
     Ok(())
 }

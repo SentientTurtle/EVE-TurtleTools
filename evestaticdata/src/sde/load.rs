@@ -19,6 +19,7 @@ use util::units::EVEUnit;
 use zip::ZipArchive;
 use zip::result::ZipError;
 use crate::types::ids::MissionID;
+use crate::util::reflist::RefList;
 
 /// Error indicating failure to load SDE
 #[derive(Debug)]
@@ -217,6 +218,13 @@ pub struct LocalizedString {
 }
 
 impl LocalizedString {
+    /// English string
+    ///
+    /// Getter for `en` field matching the `try_` methods
+    pub fn en(&self) -> &str {
+        &self.en
+    }
+
     /// German string if available, else English string
     pub fn try_de(&self) -> &str {
         self.de.as_ref().unwrap_or(&self.en)
@@ -4616,6 +4624,18 @@ impl TypeList {
             .flat_map(group_types)
             .chain(self.includedTypeIDs.iter().copied())
             .filter(|t| !self.excludedTypeIDs.contains(t))
+    }
+
+    pub fn as_reflist(&self) -> RefList<'_> {
+        RefList {
+            name: &*self.name,
+            included_types: &self.includedTypeIDs,
+            excluded_types: &self.excludedTypeIDs,
+            included_groups: &self.includedGroupIDs,
+            excluded_groups: &self.excludedGroupIDs,
+            included_categories: &self.includedCategoryIDs,
+            excluded_categories: &self.excludedCategoryIDs,
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-pub mod item_list;
+pub mod reflist;
 
 pub mod user_agent {
     use std::ops::Deref;
@@ -65,7 +65,7 @@ pub mod units {
     #[allow(non_camel_case_types)]
     #[repr(u32)]
     #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-    #[cfg_attr(feature = "serde", derive(serde_repr::Serialize_repr, serde_repr::Deserialize_repr))]
+    #[cfg_attr(feature = "sde_load", derive(serde_repr::Serialize_repr, serde_repr::Deserialize_repr))]
     pub enum EVEUnit {
         Meter = 1,
         Kilogram = 2,

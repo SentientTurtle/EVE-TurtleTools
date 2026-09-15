@@ -81,9 +81,9 @@ pub mod uuids {
 
     #[allow(non_camel_case_types)]
     #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-    #[cfg_attr(feature="serde", derive(serde::Deserialize))]  // TODO: Make configurable depending on load feature
+    #[cfg_attr(feature="sde_load", derive(serde::Deserialize))]
     pub struct EVE_UUID(
-        #[cfg_attr(feature="serde", serde(with = "uuid::serde::hyphenated"))]
+        #[cfg_attr(feature="sde_load", serde(with = "uuid::serde::hyphenated"))]
         pub Uuid
     );
 

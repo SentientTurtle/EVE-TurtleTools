@@ -5,9 +5,8 @@ pub mod types;
 pub mod util;
 pub mod sde;
 
-pub mod esi;
-
 pub mod hardcoded;
+
 #[cfg(test)]
 pub mod test;
 

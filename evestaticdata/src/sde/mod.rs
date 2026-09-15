@@ -39,6 +39,13 @@ pub mod diff {
             loop {
                 let (patch_key, patch) = match (&c_peek, &p_peek) {
                     (Some(c_line), Some(p_line)) => {
+                        // Optimization stolen from FC Pinky
+                        if c_line == p_line {
+                            c_peek = current_lines.next().transpose()?;
+                            p_peek = prev_lines.next().transpose()?;
+                            continue;
+                        }
+
                         let c_value: serde_json::Map<String, Value> = serde_json::from_str(c_line)?;
                         let p_value: serde_json::Map<String, Value> = serde_json::from_str(p_line)?;
 
@@ -158,3 +165,6 @@ pub mod diff {
 #[allow(non_snake_case)]
 #[cfg(all(feature="export_sqlite", feature="sde_load"))]
 pub mod sqlite;
+
+#[cfg(feature = "npc_data")]
+pub mod npc;

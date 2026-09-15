@@ -4,45 +4,62 @@
 //! * Updates are manual and users must download the latest version of this crate to receive them.
 //! * Data is likely to be outdated.
 //! * Data may be erroneous.
-//! * Data ignores CCP data marked as "un-published" unless explicitly stated otherwise.
+//! * Data ignores game data marked as "un-published" unless explicitly stated otherwise.
 //!
 //! We are not responsible if your space pixels explode.
 
-#[cfg(feature = "serde")]
+
+#[cfg(feature = "export_hardcoded")]
+#[allow(deprecated)]
 pub fn export<W: std::io::Write>(out: W) {
-    // Indexmap to retain order
-    let constants = IndexMap::from([
-        ("MAX_TARGETING_RANGE", magic_constants::MAX_TARGETING_RANGE)
-    ]);
-    
-    let holds = IndexMap::from([
-        ("SMB", cargo::SHIP_MAINTENANCE_BAY),
-        ("SMB_RORQ", cargo::SHIP_MAINTENANCE_BAY_RORQUAL),
-        ("FLEET", cargo::FLEET_HANGAR),
-        ("FUEL", cargo::FUEL_BAY),
-        ("MINING", cargo::MINING_HOLD),
-        ("GAS", cargo::GAS_HOLD),
-        ("MINERAL", cargo::MINERAL_HOLD),
-        ("AMMO", cargo::AMMO_HOLD),
-        ("COMMAND_CENTER", cargo::COMMAND_CENTER_HOLD),
-        ("PI", cargo::PLANETARY_COMMODITIES_HOLD),
-        ("QUAFE", cargo::QUAFE_HOLD),
-        ("CORPSE", cargo::CORPSE_HOLD),
-        ("BOOSTER", cargo::BOOSTER_HOLD),
-        ("SUBSYSTEM", cargo::SUBSYSTEM_HOLD),
-        ("ICE", cargo::ICE_HOLD),
-        ("DEPOT", cargo::MOBILE_DEPOT_HOLD),
-        ("INFRASTRUCTURE", cargo::INFRASTRUCTURE_HOLD),
-    ]);
-    
+    use serde::{Serialize, Serializer};
+    use crate::util::reflist::RefList;
+
     #[derive(serde::Serialize)]
-    struct Exports {
-        constants: IndexMap<&'static str, f64>,
-        holds: IndexMap<&'static str, cargo::CargoHoldType<'static>>
+    struct Exports<const N1: usize, const N2: usize> {
+        #[serde(serialize_with="serialize_tuple_array")]
+        constants: [(&'static str, f64); N1],
+        #[serde(serialize_with="serialize_tuple_array")]
+        holds: [(&'static str, cargo::CargoHoldType<'static>); N2],
+        game_rules: GameRules
+    }
+    #[derive(serde::Serialize)]
+    struct GameRules {
+        cargo_in_ship_in_bay: RefList<'static>
     }
 
-    use indexmap::IndexMap;
-    serde_json::to_writer_pretty(out, &Exports { constants, holds }).unwrap();
+    fn serialize_tuple_array<K: Serialize, V: Serialize, S: Serializer, const N: usize>(array: &[(K, V); N], serializer: S) -> Result<S::Ok, S::Error> {
+        // Delegate to collect_map, and convert ref-of-tuple to tuple of ref
+        serializer.collect_map(array.into_iter().map(|(k, v): &(K, V)| (k, v)))
+    }
+
+    serde_json::to_writer_pretty(out, &Exports {
+        constants: [
+            ("MAX_TARGETING_RANGE", magic_constants::MAX_TARGETING_RANGE)
+        ],
+        holds: [
+            ("SMB", cargo::SHIP_MAINTENANCE_BAY),
+            ("SMB_RORQ", cargo::SHIP_MAINTENANCE_BAY_RORQUAL),
+            ("FLEET", cargo::FLEET_HANGAR),
+            ("FUEL", cargo::FUEL_BAY),
+            ("MINING", cargo::MINING_HOLD),
+            ("GAS", cargo::GAS_HOLD),
+            ("MINERAL", cargo::MINERAL_HOLD),
+            ("AMMO", cargo::AMMO_HOLD),
+            ("COMMAND_CENTER", cargo::COMMAND_CENTER_HOLD),
+            ("PI", cargo::PLANETARY_COMMODITIES_HOLD),
+            ("QUAFE", cargo::QUAFE_HOLD),
+            ("CORPSE", cargo::CORPSE_HOLD),
+            ("BOOSTER", cargo::BOOSTER_HOLD),
+            ("SUBSYSTEM", cargo::SUBSYSTEM_HOLD),
+            ("ICE", cargo::ICE_HOLD),
+            ("DEPOT", cargo::MOBILE_DEPOT_HOLD),
+            ("INFRASTRUCTURE", cargo::INFRASTRUCTURE_HOLD),
+            ("EXPEDITION", cargo::EXPEDITION_HOLD),
+            ("FRIG_ESCAPE_BAY", cargo::FRIGATE_ESCAPE_BAY)
+        ],
+        game_rules: GameRules { cargo_in_ship_in_bay: cargo::CARGO_IN_SHIP_IN_BAY },
+    }).unwrap();
 }
 
 pub mod magic_constants {
@@ -63,7 +80,8 @@ pub mod id_ranges {
     pub const CELESTIALS: RangeInclusive<u32> = 40_000_000..=49_999_999;
     pub const STARGATES: RangeInclusive<u32> = 50_000_000..=59_999_999;
     pub const STATIONS: RangeInclusive<u32> = 60_000_000..=69_999_999;
-    pub const ASTEROIDS: RangeInclusive<u32> = 70_000_000..=79_999_999; // Note: *NOT* Asteroid Belts, ids::AsteroidBeltID is under CELESTIALS
+    /// Note: *NOT* Asteroid Belts, ids::AsteroidBeltID is under CELESTIALS
+    pub const ASTEROIDS: RangeInclusive<u32> = 70_000_000..=79_999_999;
     pub const CONTROL_BUNKERS: RangeInclusive<u32> = 80_000_000..=80_099_999;
     pub const WIS_PROMENADES: RangeInclusive<u32> = 81_000_000..=81_999_999;    // Press 'F' to pay respects
     pub const PLANETARY_DISTRICTS: RangeInclusive<u32> = 82_000_000..=84_999_999;
@@ -75,40 +93,54 @@ pub mod id_ranges {
     pub const EVE_CHARS_4: RangeInclusive<u32> = 2_112_000_000..=2_129_999_999;
 }
 
+/// Information about cargo holds and their restrictions
+///
+/// Does not include information about unused holds (e.g. those on the Cockroach dev-only ship)
 pub mod cargo {
-    use crate::util::item_list::TypeList;
+    use crate::util::reflist::RefList;
     use crate::types::ids::AttributeID;
 
-    #[cfg_attr(feature = "serde", derive(serde::Serialize))]
+    #[cfg_attr(feature = "export_hardcoded", derive(serde::Serialize))]
     pub struct CargoHoldType<'a> {
         pub attribute_id: Option<AttributeID>,
-        pub filter: Option<TypeList<'a>>,
+        #[cfg_attr(feature = "export_hardcoded", serde(skip_serializing_if="Option::is_none"))]
+        pub filter: Option<RefList<'a>>,
         pub packaged_ships: bool,
         pub assembled_ships: bool,
     }
 
     pub const SHIP_MAINTENANCE_BAY: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(908),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_categories: &[6],  // Ships
-            ..TypeList::empty()
+            ..RefList::with_name("Ship Maintenance Bay Filter")
         }),
         packaged_ships: false,
         assembled_ships: true,
     };
 
-    // TODO: Validate with attribute 1891
+    /// Canonical source: Attribute 1891 on ships that may be contained
     pub const SHIP_MAINTENANCE_BAY_RORQUAL: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(908),
-        filter: Some(TypeList { // TODO: Verify this list
+        filter: Some(RefList {
+            included_types: &[
+                32880,  // Venture
+                89648,  // Venture Consortium Issue
+                89240,  // Pioneer
+                89647,  // Pioneer Consortium Issue
+                89649,  // Outrider
+                91174,  // Perseverance
+                42244,  // Porpoise
+            ],
             included_groups: &[
                 28,     // Hauler
                 380,    // Deep Space Transport
                 1202,   // Blockade Runner
                 463,    // Mining Barge
                 543,    // Exhumer
+                1283,   // Expedition Frigate
             ],
-            ..TypeList::empty()
+            ..RefList::with_name("Rorqual Ship Maintenance Bay Filter")
         }),
         packaged_ships: false,
         assembled_ships: true,
@@ -123,9 +155,9 @@ pub mod cargo {
 
     pub const FUEL_BAY: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(1549),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_groups: &[423],    // Ice product
-            ..TypeList::empty()
+            ..RefList::with_name("Fuel Bay Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -133,10 +165,10 @@ pub mod cargo {
 
     pub const MINING_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(1556),
-        filter: Some(TypeList { // TODO: Verify this list
+        filter: Some(RefList { // TODO: Verify this list
             included_groups: &[711],    // Gas cloud
             included_categories: &[25], // Asteroid (= Ore types)
-            ..TypeList::empty()
+            ..RefList::with_name("Mining Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -144,9 +176,9 @@ pub mod cargo {
 
     pub const GAS_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(1557),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_groups: &[711],    // Gas cloud
-            ..TypeList::empty()
+            ..RefList::with_name("Gas Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -154,9 +186,9 @@ pub mod cargo {
 
     pub const MINERAL_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(1558),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_groups: &[18],    // Mineral
-            ..TypeList::empty()
+            ..RefList::with_name("Mineral Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -164,9 +196,9 @@ pub mod cargo {
     
     pub const AMMO_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(1573),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_categories: &[8],    // Charge
-            ..TypeList::empty()
+            ..RefList::with_name("Ammo Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -174,9 +206,9 @@ pub mod cargo {
     
     pub const COMMAND_CENTER_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(1646),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_groups: &[1027],   // Command Center
-            ..TypeList::empty()
+            ..RefList::with_name("Command Center Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -184,21 +216,22 @@ pub mod cargo {
     
     pub const PLANETARY_COMMODITIES_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(1653),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_categories: &[
                 42,     // Planetary Resources (T0/Raw resources)
                 43      // Planetary Commodities
             ],
-            ..TypeList::empty()
+            ..RefList::with_name("Planetary Commodity Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
     };
     
     // TODO: Possibly remove as the Quafe-edition ships with this have been converted into a SKIN?
+    #[deprecated(note = "Quafe hold ships have been converted to SKINs")]
     pub const QUAFE_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(1804),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_types: &[
                 3699,
                 12865,
@@ -208,7 +241,7 @@ pub mod cargo {
                 60575,
                 12994,
             ],
-            ..TypeList::empty()
+            ..RefList::with_name("Quafe Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -216,9 +249,9 @@ pub mod cargo {
     
     pub const CORPSE_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(2467),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_groups: &[14], // Biomass (corpses)
-            ..TypeList::empty()
+            ..RefList::with_name("Corpse Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -226,9 +259,9 @@ pub mod cargo {
 
     pub const BOOSTER_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(2657),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_groups: &[303], // Booster
-            ..TypeList::empty()
+            ..RefList::with_name("Booster Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -236,9 +269,9 @@ pub mod cargo {
 
     pub const SUBSYSTEM_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(2675),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_categories: &[32], // Subsystem
-            ..TypeList::empty()
+            ..RefList::with_name("Subsystem Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -246,9 +279,9 @@ pub mod cargo {
 
     pub const ICE_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(3136),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_groups: &[465], // Ice
-            ..TypeList::empty()
+            ..RefList::with_name("Ice Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -256,9 +289,9 @@ pub mod cargo {
 
     pub const MOBILE_DEPOT_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(5325),
-        filter: Some(TypeList {
+        filter: Some(RefList {
             included_groups: &[1246], // Mobile Depot
-            ..TypeList::empty()
+            ..RefList::with_name("Mobile Depot Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
@@ -266,7 +299,7 @@ pub mod cargo {
 
     pub const INFRASTRUCTURE_HOLD: CargoHoldType<'static> = CargoHoldType {
         attribute_id: Some(5646),
-        filter: Some(TypeList { // TODO Verify this list, in particular: PI control centers
+        filter: Some(RefList { // TODO Verify this list, in particular: PI control centers
             included_categories: &[
                 42,     // Planetary Resources (T0/Raw resources)
                 43,     // Planetary Commodities
@@ -296,105 +329,92 @@ pub mod cargo {
                 43,     // Planetary Commodities
                 423,    // Ice product
             ],
-            ..TypeList::empty()
+            ..RefList::with_name("Infrastructure Hold Filter")
         }),
         packaged_ships: false,
         assembled_ships: false,
     };
-}
 
-pub mod wormhole {
-    use crate::types::ids;
+    /// Canonical source: TypeList #1000
+    pub const EXPEDITION_HOLD: CargoHoldType<'static> = CargoHoldType {
+        attribute_id: Some(5944),
+        filter: Some(RefList {
+            included_categories: &[
+                9,      // Blueprints
+                16,     // Skillbook
+                17,     // Commodity
+                22,     // Deployable
+                30,     // Apparel
+                34,     // Ancient Relics
+                63,     // Special Edition Assets
+                91,     // SKINs
+                2118    // Personalization (SKINR)
+            ],
+            included_groups: &[
+                87,     // Capacitor Booster Charge
+                303,    // Booster
+                479,    // Scanner Probe (Regular + Combat)
+                492,    // Survey Probe
+                500,    // Festival Charges
+                711,    // Harvestable Cloud (Gas)
+                754,    // Salvaged Materials
+                886,    // Rogue Drone Components
+                966,    // Ancient Salvage (WH Space salvage)
+                1304,   // Generic Decryptor (Invention decryptor)
+                1676,   // Named Components (Exploration data site "Junk")
+                1769,   // Shield Command Burst Charges
+                1771,   // Mining Foreman Burst Charges
+                1772,   // Skirmish Command Burst Charges
+                1773,   // Information Command Burst Charges
+                1774,   // Armor Command Burst Charges
+                1976,   // Structure Festival Charges
+                4168    // Compressed Gas
+            ],
+            included_types: &[28668],   // Nanite Repair Paste
+            ..RefList::with_name("Expedition Hold Filter")
+        }),
+        packaged_ships: false,
+        assembled_ships: false,
+    };
 
-    pub enum WormholeEffect {
-        PulsarC1,
-        PulsarC2,
-        PulsarC3,
-        PulsarC4,
-        PulsarC5,
-        PulsarC6,
+    pub const FRIGATE_ESCAPE_BAY: CargoHoldType<'static> = CargoHoldType {
+        attribute_id: Some(3020),
+        filter: Some(RefList {
+            included_groups: &[
+                25,     // (T1) Frigate
+                324,    // Assault Frigate
+                893,    // Electronic Attack Ship
+                1527,   // Logistics Frigate
+            ],
+            ..RefList::with_name("Frigate Escape Bay Filter")
+        }),
+        packaged_ships: false,
+        assembled_ships: true,
+    };
 
-        BlackHoleC1,
-        BlackHoleC2,
-        BlackHoleC3,
-        BlackHoleC4,
-        BlackHoleC5,
-        BlackHoleC6,
-
-        CataclysmicVariableC1,
-        CataclysmicVariableC2,
-        CataclysmicVariableC3,
-        CataclysmicVariableC4,
-        CataclysmicVariableC5,
-        CataclysmicVariableC6,
-
-        MagnetarC1,
-        MagnetarC2,
-        MagnetarC3,
-        MagnetarC4,
-        MagnetarC5,
-        MagnetarC6,
-
-        RedGiantC1,
-        RedGiantC2,
-        RedGiantC3,
-        RedGiantC4,
-        RedGiantC5,
-        RedGiantC6,
-
-        WolfRayetC1,
-        WolfRayetC2,
-        WolfRayetC3,
-        WolfRayetC4,
-        WolfRayetC5,
-        WolfRayetC6,
-
-        WolfRayetC13,
-    }
-
-    impl WormholeEffect {
-        pub fn beacon_id(&self) -> ids::TypeID {
-            match self {
-                WormholeEffect::PulsarC1 => 30844,
-                WormholeEffect::PulsarC2 => 30865,
-                WormholeEffect::PulsarC3 => 30866,
-                WormholeEffect::PulsarC4 => 30867,
-                WormholeEffect::PulsarC5 => 30868,
-                WormholeEffect::PulsarC6 => 30869,
-                WormholeEffect::BlackHoleC1 => 30845,
-                WormholeEffect::BlackHoleC2 => 30850,
-                WormholeEffect::BlackHoleC3 => 30851,
-                WormholeEffect::BlackHoleC4 => 30852,
-                WormholeEffect::BlackHoleC5 => 30853,
-                WormholeEffect::BlackHoleC6 => 30854,
-                WormholeEffect::CataclysmicVariableC1 => 30846,
-                WormholeEffect::CataclysmicVariableC2 => 30880,
-                WormholeEffect::CataclysmicVariableC3 => 30881,
-                WormholeEffect::CataclysmicVariableC4 => 30884,
-                WormholeEffect::CataclysmicVariableC5 => 30883,
-                WormholeEffect::CataclysmicVariableC6 => 30882,
-                WormholeEffect::MagnetarC1 => 30847,
-                WormholeEffect::MagnetarC2 => 30860,
-                WormholeEffect::MagnetarC3 => 30861,
-                WormholeEffect::MagnetarC4 => 30862,
-                WormholeEffect::MagnetarC5 => 30863,
-                WormholeEffect::MagnetarC6 => 30864,
-                WormholeEffect::RedGiantC1 => 30848,
-                WormholeEffect::RedGiantC2 => 30870,
-                WormholeEffect::RedGiantC3 => 30871,
-                WormholeEffect::RedGiantC4 => 30872,
-                WormholeEffect::RedGiantC5 => 30873,
-                WormholeEffect::RedGiantC6 => 30874,
-                WormholeEffect::WolfRayetC1 => 30849,
-                WormholeEffect::WolfRayetC2 => 30875,
-                WormholeEffect::WolfRayetC3 => 30876,
-                WormholeEffect::WolfRayetC4 => 30877,
-                WormholeEffect::WolfRayetC5 => 30878,
-                WormholeEffect::WolfRayetC6 => 30879,
-                WormholeEffect::WolfRayetC13 => 30879,  // Uses the C6 effect beacon
-            }
-        }
-    }
-
-    // `WORMHOLE_EFFECTS` is removed; Data back in the SDE
+    /// Canonical source: TypeList #11
+    pub const CARGO_IN_SHIP_IN_BAY: RefList<'static> = RefList {
+        // TODO: Test these
+        included_categories: &[
+            7,          // Module
+            8,          // Charge
+            18,         // Drone
+            20,         // Implant
+            22,         // Deployable
+            32,         // Subsystem
+        ],
+        included_groups: &[
+            303,        // Booster
+            361,        // Mobile Warp Disruptor    TODO: This is covered by deployable category
+            1979,       // Abyssal Filaments
+            4041,       // Jump Filaments
+            4050,       // Abyssal Proving Filaments
+            4087,       // Triglavian Space Filaments
+        ],
+        included_types: &[
+            16273,      // Liquid Ozone
+            16275       // Strontium Clathrates
+        ],
+        ..RefList::with_name("Cargo allowed in ships that are in SMBs/Frigate Bays")
+    };
 }
