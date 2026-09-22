@@ -11,21 +11,23 @@ use std::sync::OnceLock;
 use clap::{Arg, ArgAction, Command};
 use clap::builder::ValueParser;
 use std::io::Write;
+use std::process::ExitCode;
 use evestaticdata::sde::load::SDELoader;
 
 pub mod icons;
 
 static LOG_FILE: OnceLock<fs::File> = OnceLock::new();
 
-fn main() {
+fn main() -> ExitCode {
     match do_main() {
-        Ok(()) => {}
+        Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             println!("Error: {}", err);
             let log_file = LOG_FILE.get();
             if let Some(mut log) = log_file {
                 writeln!(log, "Error: {}", err).unwrap();
             }
+            ExitCode::FAILURE
         }
     }
 }
