@@ -2,7 +2,7 @@ pub const CRATE_NAME: &'static str = env!("CARGO_PKG_NAME");
 pub const CRATE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const CRATE_REPO: &'static str = env!("CARGO_PKG_REPOSITORY");
 
-use crate::icons::{IconBuildData, IconConfig, IconError, OutputMode};
+use crate::icons::{IconBuildData, IconConfig, IconError, IconImageFormat, OutputMode};
 use evesharedcache::cache::CacheDownloader;
 use std::time::Instant;
 use fs_err as fs;
@@ -101,6 +101,15 @@ fn do_main() -> Result<(), IconError> {
                 .long("no_purge")
                 .help("Do not purge icon cache folder")
                 .action(ArgAction::SetTrue),
+            Arg::new("image_format")
+                .long("image_format")
+                .help("Force image format (CAUTION: Not cached!)")
+                .value_parser(["native", "webp"]),
+            Arg::new("image_quality")
+                .long("image_quality")
+                .help("Set image quality for image_format flag")
+                .requires("image_format")
+                .value_parser(0i64..=100i64),
         ])
         .subcommand_required(true)
         .subcommands([
@@ -363,6 +372,14 @@ fn do_main() -> Result<(), IconError> {
         use_old_overlays: arg_matches.get_flag("old_overlays"),
         module_overlays: arg_matches.get_flag("module_overlays"),
         clone_overlays: arg_matches.get_flag("clone_overlays"),
+        image_format: match arg_matches.get_one::<String>("image_format") {
+            None => IconImageFormat::Native,
+            Some(name) => match name.as_str() {
+                "native" => IconImageFormat::Native,
+                "webp" => IconImageFormat::WEBP(arg_matches.get_one::<i64>("image_quality").map(|i| *i as u32)),    // clap enforces 0-100 range
+                _ => unreachable!("clap ensures image_format flag only passes valid values")
+            }
+        },
     };
 
     let start = Instant::now();

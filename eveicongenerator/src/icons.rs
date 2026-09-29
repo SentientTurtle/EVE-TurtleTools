@@ -11,9 +11,12 @@ use std::fmt::{Display, Formatter};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::io::{Cursor, Write};
 use std::path::{Path};
-use std::{io};
+use std::{io, mem};
+use std::borrow::Cow;
+use std::process::ExitCode;
 use fs_err as fs;
 use fs_err::File;
+use webp::WebPConfig;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
@@ -98,7 +101,67 @@ pub mod hash {
 pub struct IconConfig {
     pub use_old_overlays: bool,
     pub module_overlays: bool,
-    pub clone_overlays: bool
+    pub clone_overlays: bool,
+    pub image_format: IconImageFormat
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum IconImageFormat {
+    Native,
+    #[cfg(feature = "webp")]
+    WEBP(Option<u32>)
+}
+
+impl IconImageFormat {
+    pub fn help_text(&self) -> &'static str {
+        match self {
+            IconImageFormat::Native => "As in game files",
+            IconImageFormat::WEBP(None) => "WEBP (Lossless)",
+            IconImageFormat::WEBP(Some(_)) => "WEBP (Lossy)",
+        }
+    }
+
+    pub fn extension(&self) -> Option<&'static str> {
+        match self {
+            IconImageFormat::Native => None,
+            IconImageFormat::WEBP(_) => Some("webp"),
+        }
+    }
+
+    pub fn write_cacheimage<P: AsRef<Path>, W: Write>(&self, cache_file: P, out: &mut W) -> Result<(), IconError>{
+        if let IconImageFormat::Native = self {
+            io::copy(&mut File::open(cache_file.as_ref())?, out)?;
+            Ok(())
+        } else {
+            self.write_dyimage(
+                ImageReader::open(cache_file)?.with_guessed_format()?.decode()?,
+                out,
+                |_, _| unreachable!()
+            )
+        }
+    }
+
+    pub fn write_dyimage<W: Write, F: Fn(DynamicImage, &mut W) -> Result<(), IconError>>(&self, image: DynamicImage, out: &mut W, native: F) -> Result<(), IconError>{
+        match self {
+            IconImageFormat::Native => native(image, out),
+            #[cfg(feature = "webp")]
+            IconImageFormat::WEBP(quality) => {
+                // `webp` crate only supports RGBA8 images
+                let image = DynamicImage::ImageRgba8(image.into_rgba8());
+                let encoder = webp::Encoder::from_image(&image).expect("dynamic image is converted to rgba before exporting to webp");
+                if let Some(quality) = quality {
+                    let mut config = WebPConfig::new().unwrap();
+                    config.method = 4;
+                    config.quality = *quality as f32;
+                    
+                    io::copy(&mut &*encoder.encode_advanced(&config).map_err(|e| format!("{:?}", e)).map_err(io::Error::other)?, out)?;
+                } else {
+                    io::copy(&mut &*encoder.encode_lossless(), out)?;
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -788,6 +851,9 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
         to_remove = Vec::new();
     }
 
+    if !silent_mode { println!("\tImage format: {}", icon_config.image_format.help_text()); }
+    if let Some(mut log) = log_file { writeln!(log, "\tImage format: {}", icon_config.image_format.help_text())?; }
+
     for output_mode in output_modes {
         match output_mode {
             OutputMode::ServiceBundle { out } => {
@@ -802,14 +868,27 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                 let mut writer = ZipWriter::new(File::create(out)?);
 
                 let mut written = HashSet::new();
-                for (type_id, metadata) in &service_metadata {
+                for (type_id, metadata) in &mut service_metadata {
                     for (icon_kind, filename) in metadata {
+                        let cache_file = match &icon_config.image_format {
+                            IconImageFormat::Native => filename,
+                            _ => {
+                                let new_name = format!(
+                                    "{}.{}",
+                                    filename.rsplit_once('.').map(|(name, _ext)| name).unwrap_or(filename),
+                                    icon_config.image_format.extension().expect("all non-'native' icon image formats have an extension set")
+                                );
+                                &*mem::replace(filename, new_name)
+                            },
+                        };
+                        let cache_file = &*cache_file;  // Reborrow to switch to immutable borrow
                         if let Some(mut log) = log_file { writeln!(log, "\t\tType {} ({}) - {}", type_id, icon_kind, filename)?; }
-                        if written.insert(filename) {
-                            writer.start_file(filename, FileOptions::<()>::default().compression_method(CompressionMethod::Stored))
+                        if written.insert(&*filename) {
+                            writer.start_file(&*filename, FileOptions::<()>::default().compression_method(CompressionMethod::Stored))
                                 .map_err(|e| format!("err in {}: {}", filename, e))
                                 .map_err(io::Error::other)?;
-                            io::copy(&mut File::open(icon_dir.join(filename))?, &mut writer)?;
+
+                            icon_config.image_format.write_cacheimage(icon_dir.join(&*cache_file), &mut writer)?;
                         }
                     }
                 }
@@ -834,23 +913,26 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     for (icon_kind, filename) in icons {
                         match icon_kind {
                             IconKind::Icon => {
-                                let output_name = format!("{}_64.png", type_id);
+                                let output_name = format!("{}_64.{}", type_id, icon_config.image_format.extension().unwrap_or("png"));
                                 if let Some(mut log) = log_file { writeln!(log, "\t\tType {} ({}) - {} [{}]", type_id, icon_kind, output_name, filename)?; }
                                 writer.start_file(&output_name, FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
-                                io::copy(&mut File::open(icon_dir.join(filename))?, &mut writer)?;
+
+                                icon_config.image_format.write_cacheimage(icon_dir.join(filename), &mut writer)?;
                             }
                             IconKind::Blueprint | IconKind::Reaction | IconKind::Relic => { /* None, these are duplicated by IconKind::Icon */ }
                             IconKind::BlueprintCopy => {
-                                let output_name = format!("{}_bpc_64.png", type_id);
+                                let output_name = format!("{}_bpc_64.{}", type_id, icon_config.image_format.extension().unwrap_or("png"));
                                 if let Some(mut log) = log_file { writeln!(log, "\t\tType {} ({}) - {} [{}]", type_id, icon_kind, output_name, filename)?; }
                                 writer.start_file(&output_name, FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
-                                io::copy(&mut File::open(icon_dir.join(filename))?, &mut writer)?;
+
+                                icon_config.image_format.write_cacheimage(icon_dir.join(filename), &mut writer)?;
                             }
                             IconKind::Render => {
-                                let output_name = format!("{}_512.jpg", type_id);
+                                let output_name = format!("{}_512.{}", type_id, icon_config.image_format.extension().unwrap_or("jpg"));
                                 if let Some(mut log) = log_file { writeln!(log, "\t\tType {} ({}) - {} [{}]", type_id, icon_kind, output_name, filename)?; }
                                 writer.start_file(&output_name, FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
-                                io::copy(&mut File::open(icon_dir.join(filename))?, &mut writer)?;
+
+                                icon_config.image_format.write_cacheimage(icon_dir.join(filename), &mut writer)?;
                             }
                         }
                     }
@@ -867,6 +949,12 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                 let mode_name = if copy_files { "COPYING" } else if hard_link { "HARD LINK" } else { "SOFT LINK" };
                 if !silent_mode { println!("\tBuilding web folder to {:?} ({})", out, mode_name); }
                 if let Some(mut log) = log_file { writeln!(log, "\tBuilding web folder to {:?} ({})", out, mode_name)?; }
+
+                if icon_config.image_format != IconImageFormat::Native {
+                    if !silent_mode { println!("\tImage format override set, ignored by webdir"); }
+                    if let Some(mut log) = log_file { writeln!(log, "\tImage format override set, ignored by webdir")?; }
+                }
+
                 let mut created_files = HashMap::<String, String>::new();
 
                 let index_path = out.join("index.json");
@@ -941,7 +1029,6 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     print!("{:x}", md5::compute(&index_bytes))
                 }
             },
-            // Auxiliary outputs don't use the icon cache, but updating/checking it is quite fast so these outputs don't skip it
             OutputMode::AuxShipTreeRenders { out } => {
                 if !silent_mode { println!("\tWriting Auxiliary Ship Tree Render archive to {:?}", out); }
                 if let Some(mut log) = log_file { writeln!(log, "\tWriting Auxiliary Ship Tree Render archive to {:?}", out)?; }
@@ -971,9 +1058,10 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                                     }
                                 }
 
-                                out.write_to(&mut buf, ImageFormat::Png)?;
+                                // Write to a buffer because img.write_to requires `Seek`
+                                icon_config.image_format.write_dyimage(DynamicImage::ImageLumaA8(out), &mut buf, |img, buf| { img.write_to(buf, ImageFormat::Png)?; Ok(()) })?;
 
-                                writer.start_file(format!("{}.png", type_id), FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
+                                writer.start_file(format!("{}.{}", type_id, icon_config.image_format.extension().unwrap_or("png")), FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
                                 std::io::copy(&mut buf.get_ref().as_slice(), &mut writer)?;
                                 buf.set_position(0);
                                 buf.get_mut().clear();
@@ -994,9 +1082,8 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     if !silent_mode { println!("\t\t{}: {}", icon_id, resource); };
                     if let Some(mut log) = log_file { writeln!(log, "\t\t{}: {}", icon_id, resource)?; }
 
-                    let resource_path = cache.path_of(resource)?;
-                    writer.start_file(format!("{}.{}", icon_id, extension), FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
-                    std::io::copy(&mut File::open(resource_path)?, &mut writer)?;
+                    writer.start_file(format!("{}.{}", icon_id, icon_config.image_format.extension().unwrap_or(extension)), FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
+                    icon_config.image_format.write_cacheimage(cache.path_of(resource)?, &mut writer)?;
                 }
                 writer.finish().map_err(io::Error::other)?.flush()?;
             }
@@ -1010,13 +1097,18 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                 let res_count = cache.iter_resources().filter(resource_valid).count();
                 for (n, resource) in cache.iter_resources().filter(resource_valid).enumerate() {
                     let (_resource_kind, filename) = resource.split_once(":/").unwrap_or(("", resource));
-                    let resource_path = cache.path_of(resource)?;
 
                     if !silent_mode { println!("\t\t[{}/{}] {}", n, res_count, resource); }
                     if let Some(mut log) = log_file { writeln!(log, "\t\t[{}/{}] {}", n, res_count, resource)?; }
 
+                    let filename = if let Some(extension) = icon_config.image_format.extension() {
+                        Cow::Owned(format!("{}.{}", filename.rsplit_once('.').map(|(name, _ext)| name).unwrap_or(filename), extension))
+                    } else {
+                        Cow::Borrowed(filename)
+                    };
+
                     writer.start_file(filename, FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
-                    std::io::copy(&mut File::open(resource_path)?, &mut writer)?;
+                    icon_config.image_format.write_cacheimage(cache.path_of(resource)?, &mut writer)?;
                 }
                 writer.finish().map_err(io::Error::other)?.flush()?;
             },
