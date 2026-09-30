@@ -104,7 +104,7 @@ fn do_main() -> Result<(), IconError> {
             Arg::new("image_format")
                 .long("image_format")
                 .help("Force image format (CAUTION: Not cached!)")
-                .value_parser(["native", "webp"]),
+                .value_parser(["native", #[cfg(feature = "webp")] "webp"]),
             Arg::new("image_quality")
                 .long("image_quality")
                 .help("Set image quality for image_format flag")
@@ -411,6 +411,7 @@ fn do_main() -> Result<(), IconError> {
             None => IconImageFormat::Native,
             Some(name) => match name.as_str() {
                 "native" => IconImageFormat::Native,
+                #[cfg(feature = "webp")]
                 "webp" => IconImageFormat::WEBP(arg_matches.get_one::<i64>("image_quality").map(|i| *i as u32)),    // clap enforces 0-100 range
                 _ => unreachable!("clap ensures image_format flag only passes valid values")
             }

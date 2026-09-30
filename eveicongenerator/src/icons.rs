@@ -16,7 +16,6 @@ use std::borrow::Cow;
 use fs_err as fs;
 use fs_err::File;
 use regex::Regex;
-use webp::WebPConfig;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
@@ -116,7 +115,9 @@ impl IconImageFormat {
     pub fn help_text(&self) -> &'static str {
         match self {
             IconImageFormat::Native => "As in game files",
+            #[cfg(feature = "webp")]
             IconImageFormat::WEBP(None) => "WEBP (Lossless)",
+            #[cfg(feature = "webp")]
             IconImageFormat::WEBP(Some(_)) => "WEBP (Lossy)",
         }
     }
@@ -124,11 +125,13 @@ impl IconImageFormat {
     pub fn extension(&self) -> Option<&'static str> {
         match self {
             IconImageFormat::Native => None,
+            #[cfg(feature = "webp")]
             IconImageFormat::WEBP(_) => Some("webp"),
         }
     }
 
     pub fn write_cacheimage<P: AsRef<Path>, W: Write>(&self, cache_file: P, out: &mut W) -> Result<(), IconError>{
+        #[allow(irrefutable_let_patterns)]  // Other patterns are enabled with cargo features
         if let IconImageFormat::Native = self {
             io::copy(&mut File::open(cache_file.as_ref())?, out)?;
             Ok(())
@@ -150,7 +153,7 @@ impl IconImageFormat {
                 let image = DynamicImage::ImageRgba8(image.into_rgba8());
                 let encoder = webp::Encoder::from_image(&image).expect("dynamic image is converted to rgba before exporting to webp");
                 if let Some(quality) = quality {
-                    let mut config = WebPConfig::new().unwrap();
+                    let mut config = webp::WebPConfig::new().unwrap();
                     config.method = 4;
                     config.quality = *quality as f32;
 
@@ -913,6 +916,7 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     for (icon_kind, filename) in metadata {
                         let cache_file = match &icon_config.image_format {
                             IconImageFormat::Native => filename,
+                            #[allow(unreachable_patterns)]  // Other patterns are enabled with cargo features
                             _ => {
                                 let new_name = format!(
                                     "{}.{}",

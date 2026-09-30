@@ -6,7 +6,7 @@ publish = false
 repository = "https://github.com/SentientTurtle/EVE-3rd-party-dev-tools"
 
 [features]
-default = ["webp"]
+default = []
 webp = ["dep:webp"]
 
 [dependencies]
