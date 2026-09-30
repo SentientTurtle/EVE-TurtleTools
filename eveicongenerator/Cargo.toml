@@ -22,4 +22,5 @@ chrono = "0.4.45"
 # Intentionally not the RustCrypto one. We don't need all the additional cruft RustCrypto adds.
 md5 = "0.8.1"
 fs-err = "3.3.1"
+regex = "1.13.1"
 webp = { version = "0.3.1", optional = true }

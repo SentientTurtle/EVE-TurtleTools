@@ -2,7 +2,7 @@ pub const CRATE_NAME: &'static str = env!("CARGO_PKG_NAME");
 pub const CRATE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const CRATE_REPO: &'static str = env!("CARGO_PKG_REPOSITORY");
 
-use crate::icons::{IconBuildData, IconConfig, IconError, IconImageFormat, OutputMode};
+use crate::icons::{parse_utility_list, IconBuildData, IconConfig, IconError, IconImageFormat, OutputMode};
 use evesharedcache::cache::CacheDownloader;
 use std::time::Instant;
 use fs_err as fs;
@@ -156,6 +156,22 @@ fn do_main() -> Result<(), IconError> {
                         .conflicts_with("copy_files")
                         .action(ArgAction::SetTrue)
                 ]),
+            Command::new("utility_icons")
+                .about("Export set of utility icons or user-specified list of resources")
+                .args([
+                    Arg::new("out")
+                        .short('o')
+                        .long("out")
+                        .required(true)
+                        .help("Output file")
+                        .value_name("FILE")
+                        .value_parser(ValueParser::path_buf()),
+                    Arg::new("listfile")
+                        .long("listfile")
+                        .help("File of resources to export")
+                        .value_name("FILE")
+                        .value_parser(ValueParser::path_buf()),
+                ]),
             Command::new("checksum")
                 .about("Prints (or writes) the checksum of the current icon set")
                 .arg(
@@ -232,6 +248,16 @@ fn do_main() -> Result<(), IconError> {
                         .conflicts_with("copy_files")
                         .requires("web_dir")
                         .action(ArgAction::SetTrue),
+                    Arg::new("utility_icons")
+                        .long("utility_icons")
+                        .help("Export set of utility icons or user-specified list of resources")
+                        .value_name("FILE")
+                        .value_parser(ValueParser::path_buf()),
+                    Arg::new("utility_listfile")
+                        .long("utility_listfile")
+                        .help("(utility_icons) File of resources to export")
+                        .value_name("FILE")
+                        .value_parser(ValueParser::path_buf()),
                     Arg::new("checksum_file")
                         .long("checksum_file")
                         .help("Write checksum to file")
@@ -284,6 +310,10 @@ fn do_main() -> Result<(), IconError> {
                 hard_link: command_args.get_flag("hardlink")
             }]
         },
+        "utility_icons" => {
+            let regexes = parse_utility_list(command_args.get_one::<PathBuf>("listfile"))?;
+            vec![OutputMode::UtilityIcons { out: &command_args.get_one::<PathBuf>("out").expect("out is required"), regexes }]
+        },
         "checksum" => { vec![OutputMode::Checksum { out: command_args.get_one::<PathBuf>("out").map(PathBuf::as_path) }] },
         "aux_shiptree" => vec![OutputMode::AuxShipTreeRenders { out: &command_args.get_one::<PathBuf>("out").expect("out is required") }],
         "aux_icon" => vec![OutputMode::AuxIcons { out: &command_args.get_one::<PathBuf>("out").expect("out is required") }],
@@ -310,6 +340,11 @@ fn do_main() -> Result<(), IconError> {
                     copy_files: command_args.get_flag("copy_files"),
                     hard_link: command_args.get_flag("hardlink")
                 })
+            }
+
+            if let Some(out) = command_args.get_one::<PathBuf>("utility_icons") {
+                let globs = parse_utility_list(command_args.get_one::<PathBuf>("utility_listfile"))?;
+                output_modes.push(OutputMode::UtilityIcons { out, regexes: globs })
             }
 
             if let Some(out) = command_args.get_one::<PathBuf>("aux_icons") {
@@ -397,9 +432,6 @@ fn do_main() -> Result<(), IconError> {
     if let Some(mut log) = log_file { writeln!(log, "Loading SDE...")?; }
     let icon_build_data = IconBuildData::load(SDELoader::open_latest("./cache/sde.zip")?, icon_config)?;
     let data_load_duration = data_load_start.elapsed();
-
-    if !silent_mode { println!("Building icons..."); }
-    if let Some(mut log) = log_file { writeln!(log, "Building icons...")?; }
 
     let build_start = Instant::now();
     icons::build_icon_export(

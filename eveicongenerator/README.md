@@ -87,10 +87,18 @@ For full compatibility with the Fenris Creations' official Image Service the non
 
 ## Ship Tree Export
 
-Side-on Ship renders as displayed in the game's Ship Tree. Provided as semi-transparent PNG files ready for direct use or compositing.
+Side-on Ship renders as displayed in the game's Ship Tree. Provided as semi-transparent PNG files ready for direct use or compositing.  
 Files are provided in format `[TYPE_ID].png`, only for player-flyable ships.
 
+## Utility Icons
+
+Various UI and other icons previously included in the official Fenris Creations "Image Export Collection".  
+Subject to change: Additional icons may be added. (For requests: Open an issue or direct-message)
+
 # Changes
+
+## Versions after `3561556`:
+* Added 'Utility Icons'
 
 ## Versions after `3484357`:
 * Ship Tree Export now uses 'Grayscale with Alpha Channel' PNG encoding to reduce file sizes. This encoding yields identical image data as before. If you encounter errors, open an issue.

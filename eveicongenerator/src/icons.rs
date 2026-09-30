@@ -10,12 +10,12 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::io::{Cursor, Write};
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use std::{io, mem};
 use std::borrow::Cow;
-use std::process::ExitCode;
 use fs_err as fs;
 use fs_err::File;
+use regex::Regex;
 use webp::WebPConfig;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -153,7 +153,7 @@ impl IconImageFormat {
                     let mut config = WebPConfig::new().unwrap();
                     config.method = 4;
                     config.quality = *quality as f32;
-                    
+
                     io::copy(&mut &*encoder.encode_advanced(&config).map_err(|e| format!("{:?}", e)).map_err(io::Error::other)?, out)?;
                 } else {
                     io::copy(&mut &*encoder.encode_lossless(), out)?;
@@ -527,6 +527,7 @@ pub enum OutputMode<'a> {
     ServiceBundle { out: &'a Path },
     IEC { out: &'a Path },
     Web { out: &'a Path, copy_files: bool, hard_link: bool },
+    UtilityIcons { out: &'a Path, regexes: Vec<(Regex, Option<String>)> },
     Checksum { out: Option<&'a Path> },
     AuxShipTreeRenders { out: &'a Path },
     AuxIcons { out: &'a Path },
@@ -540,10 +541,47 @@ impl<'a> OutputMode<'a> {
             OutputMode::IEC { .. } => true,
             OutputMode::Web { .. } => true,
             OutputMode::Checksum { .. } => true,
+            OutputMode::UtilityIcons { .. } => false,
             OutputMode::AuxShipTreeRenders { .. } => false,
             OutputMode::AuxIcons { .. } => false,
-            OutputMode::AuxImages { .. } => false
+            OutputMode::AuxImages { .. } => false,
         }
+    }
+}
+
+fn parse_utility_line(mut line: &str) -> Option<Result<(Regex, Option<String>), IconError>> {
+    line = line.split_once('#').map(|(line, _comment)| line).unwrap_or(line).trim();
+    if line.len() == 0 { return None; }
+    match line.split_once('=') {
+        None => {
+            match Regex::new(line) {
+                Ok(pat) => Some(Ok((pat, None))),
+                Err(err) => Some(Err(IconError::String(format!("invalid line in utility_list file: `{}` ({})", line, err))))
+            }
+        },
+        Some((resource, rename)) => {
+            match Regex::new(resource) {
+                Ok(pat) => Some(Ok((pat, Some(rename.to_owned())))),
+                Err(err) => Some(Err(IconError::String(format!("invalid line in utility_list file: `{}` ({})", line, err))))
+            }
+        }
+    }
+}
+
+pub fn parse_utility_list(file: Option<&PathBuf>) -> Result<Vec<(Regex, Option<String>)>, IconError> {
+    if let Some(file) = file {
+        BufReader::new(File::open(file)?)
+            .lines()
+            .filter_map(|r| match r {
+                Ok(line) => parse_utility_line(&line),
+                Err(err) => Some(Err(IconError::from(err)))
+            })
+            .collect()
+    } else {
+        include_str!("./utilitylist.txt")
+            .lines()
+            .filter_map(parse_utility_line)
+            .collect()
     }
 }
 
@@ -559,6 +597,9 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
     let index_path = icon_dir.join("cache.csv");
 
     if DO_INDEX_UPDATE {
+        if !silent_mode { println!("Building icons..."); }
+        if let Some(mut log) = log_file { writeln!(log, "Building icons...")?; }
+
         fs::create_dir_all(icon_dir)?;
         if fs::exists(&index_path)? {
             let mut buf = Vec::new();
@@ -1015,6 +1056,59 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     }
                 }
                 serde_json::to_writer(File::create(&index_path)?, &created_files).map_err(io::Error::other)?;
+            }
+            OutputMode::UtilityIcons { out, regexes } => {
+                if !silent_mode { println!("\tWriting Utility archive to {:?}", out); }
+                if let Some(mut log) = log_file { writeln!(log, "\tWriting Utility archive to {:?}", out)?; }
+                let mut writer = ZipWriter::new(File::create(out)?);
+
+                for resource in cache.iter_resources() {
+                    // Cut the amount of resources compared down from ~120k to ~40k
+                    // Also this tool isn't intended for a general cache resource file extraction
+                    if resource.ends_with("png") || resource.ends_with("jpg") {
+                        for (regex, replace) in &regexes {
+                            let output_name = if let Some(replace) = replace {
+                                match regex.replace(resource, replace) {
+                                    Cow::Borrowed(_) => continue,
+                                    Cow::Owned(new) => {
+                                        format!(
+                                            "{}.{}",
+                                            new.rsplit_once('.').map(|(name, _ext)| name).unwrap_or(&new),
+                                            icon_config.image_format.extension().unwrap_or_else(|| resource.rsplit_once('.').map(|(_, ext)| ext).unwrap_or("png"))
+                                        )
+                                    },
+                                }
+                            } else {
+                                if regex.is_match(resource) {
+                                    format!(
+                                        "{}.{}",
+                                        resource.rsplit_once('.').map(|(name, _ext)| name).unwrap_or(&resource),
+                                        icon_config.image_format.extension().unwrap_or_else(|| resource.rsplit_once('.').map(|(_, ext)| ext).unwrap_or("png"))
+                                    )
+                                } else {
+                                    continue
+                                }
+                            };
+
+                            match cache.path_of(&*resource) {
+                                Ok(path) => {
+                                    if !silent_mode { println!("\t\t{} -> {}", resource, output_name); };
+                                    if let Some(mut log) = log_file { writeln!(log, "\t\t{} -> {}", resource, output_name)?; }
+
+                                    writer.start_file(output_name, FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
+                                    icon_config.image_format.write_cacheimage(path, &mut writer)?;
+                                }
+                                Err(CacheError::ResourceNotFound(_)) => {
+                                    if !silent_mode { println!("\t\tMissing file: {}", resource); }
+                                    if let Some(mut log) = log_file { writeln!(log, "\t\tMissing file: {}", resource)?; }
+                                }
+                                Err(err) => Err(err)?
+                            }
+                        }
+                    }
+                }
+
+                writer.finish().map_err(io::Error::other)?.flush()?;
             }
             OutputMode::Checksum { out } => {
                 // Checksum is never skipped

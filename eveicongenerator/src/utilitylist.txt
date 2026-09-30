@@ -1,0 +1,7 @@
+res:/ui/texture/icons/icons/=icons/
+res:/ui/texture/eveicon/bracket_icons/=brackets/
+res:/ui/texture/eveicon/career_icons/(.+)_128px.png=career/$1.png
+res:/ui/texture/eveicon/killmark_icons/=killmarks/
+#res:/ui/texture/eveicon/masteries/(.+)_128px.png=masteries/$1.png
+res:/ui/texture/shared/bracket/=brackets/
+res:/ui/texture/windowicons/=windowicons/
