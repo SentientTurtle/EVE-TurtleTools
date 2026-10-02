@@ -1,4 +1,4 @@
-res:/ui/texture/icons/icons/=icons/
+res:/ui/texture/icons/=icons/
 res:/ui/texture/eveicon/bracket_icons/=brackets/
 res:/ui/texture/shared/brackets/=brackets/
 res:/ui/texture/eveicon/career_icons/(.+)_128px.png=career/$1.png
