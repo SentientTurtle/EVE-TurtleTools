@@ -1,12 +1,14 @@
 # EVE Icon Generator guide
 
 ### Global options
-* `--user_agent <user_agent>`, `-u <user_agent>` *REQUIRED*  
-  User agent for HTTP requests
+* `--user_agent <user_agent>`, `-u <user_agent>` *REQUIRED either 'user_agent' or 'user_agent_file'*  
+  User agent for HTTP requests  
+* `--user_agent_file <file>` *REQUIRED either 'user_agent' or 'user_agent_file'*  
+  User agent for HTTP requests, stored in a file.  
 * `--cache_folder <directory>`, `-c <directory>` (default: `./cache`)  
   Folder for game file cache.  
   WARNING: All other (unrelated) files in this folder will be deleted during clean-up.  
-  This folder should persist between runs to avoid re-downloading files from CCP servers.
+  This folder should persist between runs to avoid re-downloading files from FC servers.
 * `--icon_folder <directory>`, `-i <directory>` (default: `./icons`)  
   Folder for storing built icons.
   This folder may be persisted to cache image-compositing work.
@@ -23,9 +25,16 @@
 * `--skip_if_fresh`, `-s`
   If no icons have changed since the last run, skip generating output.
   NOTE: Ignored for `checksum` output mode with no checksum file specified, the checksum will still be output to stdout.
-* `--use_magick`
-  If set, attempts to use imagemagick 7 (`magick`) for image compositing
-  DEPRECATED
+* `old_overlays`
+  Use old 'glossy' tech tier overlays
+* `module_overlays`
+  Add overlays for fitting slot requirements (as used in the in-game market)
+* `clone_overlays`
+  (CUSTOM CONTENT) Add overlays for Alpha/Omega clone requirements
+* `no_purge`
+  Do not purge icon cache folder, will still clean up 'SharedCache' `cache_folder`. (Intended for use with GH actions, should not be used when caching to a local hard disk or other persistent storage.)
+* `image_format <format>`
+  Convert icon images to specified format, availability of options depends on enabled features during compilation. "native" yields images as they are provided in the game files; A mix of PNG and JPEG.
 
 Output mode subcommands:
 * `help [subcommand]` Displays help text for the specified subcommand
@@ -40,9 +49,16 @@ Output mode subcommands:
   * `--out <directory>` Output directory to write into, required.
   * `--copy_files` Copies files rather than using symlinks.
   * `--hardlink` Use hard links rather than using soft links.
+* `utility_icons`
+  Generates an 'Image Export Collection'-compatible icon .zip archive.
+  * `--out <file>` Output file for zip archive, required.
+  * `--listfile <file>` Override default list of utility icons.
 * `checksum`
   Emits a checksum of the current icon index, writes to stdout if no output file is specified.
   * `--out <file>` Output file for checksum, optional.
+* `shiptree`
+  Export of ship tree ship renders, in filename format `{typeID}.png`.
+  * `--out <file>` Output file for zip archive, required.
 * `aux_icon`
   Auxiliary Icon export, builds .zip archive with all "iconID" icons, in filename format `{iconID}.png`/`{iconID}.jpg`.
   * `--out <file>` Output file for zip archive, required.
@@ -58,6 +74,9 @@ Output mode subcommands:
   * `--web_dir <directory>` Enable web directory output, allows additional options for config.
     * `--copy_files` Copies files rather than using symlinks.
     * `--hardlink` Use hard links rather than using soft links.
+  * `--utility-icons <file>` Generates an 'Image Export Collection'-compatible icon .zip archive.
+    * `--utility_listfile <file>` Override default list of utility icons.
+  * `--shiptree <file>` Export of ship tree ship renders, in filename format `{typeID}.png`.
   * `--aux_icons <file>` Enable Auxiliary Icon output.
   * `--aux_all <file>` Enable Auxiliary all-image output.
     * `--incl-character` Include character model texture images. This adds several gigabytes of data to the export AND cache folder. (~1GB -> ~6GB, 2x totalling ~12GB of storage needed)

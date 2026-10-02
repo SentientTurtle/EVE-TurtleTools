@@ -95,7 +95,7 @@ fn do_main() -> Result<(), IconError> {
                 .action(ArgAction::SetTrue),
             Arg::new("clone_overlays")
                 .long("clone_overlays")
-                .help("Add clone restriction overlays (CUSTOM)")
+                .help("Add alpha/omega clone restriction overlays (CUSTOM)")
                 .action(ArgAction::SetTrue),
             Arg::new("no_purge")
                 .long("no_purge")
@@ -182,8 +182,9 @@ fn do_main() -> Result<(), IconError> {
                         .value_name("FILE")
                         .value_parser(ValueParser::path_buf())
                 ),
-            Command::new("aux_shiptree")
-                .about("Auxiliary Ship Tree Render dump (zip)")
+            Command::new("shiptree")
+                .alias("aux_shiptree")
+                .about("Ship Tree Render dump (zip)")
                 .arg(
                     Arg::new("out")
                         .short('o')
@@ -268,8 +269,9 @@ fn do_main() -> Result<(), IconError> {
                         .long("checksum_stout")
                         .help("Write checksum to stdout. Suppresses other stdout output")
                         .conflicts_with("checksum_file"),
-                    Arg::new("aux_shiptree")
-                        .long("aux_shiptree")
+                    Arg::new("shiptree")
+                        .long("shiptree")
+                        .alias("aux_shiptree")
                         .help("Output Auxiliary Ship Tree Render dump")
                         .value_name("FILE")
                         .value_parser(ValueParser::path_buf()),
@@ -315,7 +317,7 @@ fn do_main() -> Result<(), IconError> {
             vec![OutputMode::UtilityIcons { out: &command_args.get_one::<PathBuf>("out").expect("out is required"), regexes }]
         },
         "checksum" => { vec![OutputMode::Checksum { out: command_args.get_one::<PathBuf>("out").map(PathBuf::as_path) }] },
-        "aux_shiptree" => vec![OutputMode::AuxShipTreeRenders { out: &command_args.get_one::<PathBuf>("out").expect("out is required") }],
+        "shiptree" => vec![OutputMode::AuxShipTreeRenders { out: &command_args.get_one::<PathBuf>("out").expect("out is required") }],
         "aux_icon" => vec![OutputMode::AuxIcons { out: &command_args.get_one::<PathBuf>("out").expect("out is required") }],
         "aux_all" => {
             vec![OutputMode::AuxImages {
@@ -351,7 +353,7 @@ fn do_main() -> Result<(), IconError> {
                 output_modes.push(OutputMode::AuxIcons { out })
             }
 
-            if let Some(out) = command_args.get_one::<PathBuf>("aux_shiptree") {
+            if let Some(out) = command_args.get_one::<PathBuf>("shiptree") {
                 output_modes.push(OutputMode::AuxShipTreeRenders { out })
             }
 

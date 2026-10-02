@@ -1096,14 +1096,13 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
 
                             match cache.path_of(&*resource) {
                                 Ok(path) => {
-                                    if !silent_mode { println!("\t\t{} -> {}", resource, output_name); };
                                     if let Some(mut log) = log_file { writeln!(log, "\t\t{} -> {}", resource, output_name)?; }
 
                                     writer.start_file(output_name, FileOptions::<()>::default().compression_method(CompressionMethod::Stored)).map_err(io::Error::other)?;
                                     icon_config.image_format.write_cacheimage(path, &mut writer)?;
                                 }
                                 Err(CacheError::ResourceNotFound(_)) => {
-                                    if !silent_mode { println!("\t\tMissing file: {}", resource); }
+                                    // Shouldn't happen unless iter_resources has a bug
                                     if let Some(mut log) = log_file { writeln!(log, "\t\tMissing file: {}", resource)?; }
                                 }
                                 Err(err) => Err(err)?
