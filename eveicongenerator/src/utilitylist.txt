@@ -4,3 +4,7 @@ res:/ui/texture/shared/brackets/=brackets/
 res:/ui/texture/eveicon/career_icons/(.+)_128px.png=career/$1.png
 res:/ui/texture/eveicon/killmark_icons/=killmarks/
 res:/ui/texture/windowicons/=windowicons/
+res:/ui/texture/classes/shiptree/groupicons/(.+)_64.png=shiptree/groupicons/$1.png
+res:/ui/texture/classes/shiptree/attributes/=shiptree/attributes/
+res:/ui/texture/classes/shiptree/factions/=shiptree/factions/
+res:/ui/texture/classes/shiptree/factionbg/=shiptree/factionbg/
