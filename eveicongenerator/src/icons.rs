@@ -634,11 +634,11 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
             if (type_info.category_id == 9) || (type_info.category_id == 34) {
                 // Blueprint or reaction
 
-                if let Some(folder) = type_info.graphic_id.and_then(|graphic_id| data.graphics_folders.get(&graphic_id)).and_then(|g| g.folder.as_ref()) {
+                if let Some(folder) = type_info.graphic_id.and_then(|graphic_id| data.graphics_folders.get(&graphic_id)).and_then(|g| g.folder.as_ref()) && type_info.is_renderable {
                     let icon_resource_bp = format!("{}/{}_64_bp.png", folder.trim_end_matches('/'), type_info.graphic_id.unwrap());
                     let icon_resource_bpc = format!("{}/{}_64_bpc.png", folder.trim_end_matches('/'), type_info.graphic_id.unwrap());
 
-                    if cache.has_resource(&*icon_resource_bp) && type_info.is_renderable {
+                    if cache.has_resource(&*icon_resource_bp) {
                         let techoverlay = get_techoverlay(type_info.meta_group_id.unwrap_or(1), icon_config.use_old_overlays);
                         if let Some((overlay_cache, techoverlay)) = techoverlay.load(cache)? {
                             let index_key = hash::index_key("png", (cache.hash_of(&icon_resource_bp)?, overlay_cache));
@@ -680,6 +680,11 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                                 }
                             }
                         }
+                    } else {
+                        // Missing file
+                        if !silent_mode { println!("\tERR: Missing icon for: {}", type_id); }
+                        if let Some(mut log) = log_file { writeln!(log, "\tERR: Missing icon for: {}", type_id)?; }
+                        continue;
                     }
                 } else if let Some(icon) = type_info.icon_id { // If no graphics icon, try icon
                     let icon_resource = &*data.icon_files.get(&icon).ok_or(IconError::String(format!("unknown icon id: {}", icon)))?;
@@ -769,6 +774,7 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                         // Skip missing icons, sometimes they're broken in-game.
                         if !silent_mode { println!("\tERR: Missing icon for: {}", type_id); }
                         if let Some(mut log) = log_file { writeln!(log, "\tERR: Missing icon for: {}", type_id)?; }
+                        continue;
                     }
                 } else {
                     continue; // No icon to be generated here
