@@ -176,7 +176,8 @@ pub struct TypeInfo {
     pub meta_group_id: Option<ids::MetaGroupID>,
     pub is_renderable: bool,
     pub module_slot: Option<ModuleSlot>,
-    pub omega_required: Option<bool>
+    pub omega_required: Option<bool>,
+    pub blueprint_output_metagroup: Option<ids::MetaGroupID>
 }
 
 #[derive(Debug)]
@@ -374,10 +375,14 @@ impl IconBuildData {
 
                 let renderable_types = load_renderable_types(&mut loader)?;
 
+                let mut type_metagroups = HashMap::<ids::TypeID, ids::MetaGroupID>::new();
                 let mut types = HashMap::<ids::TypeID, TypeInfo>::new();
                 for item_type in loader.load_types()? {
                     let item_type = item_type?;
                     let item_category = *group_categories.get(&item_type.groupID).ok_or_else(|| SDELoadError::IntegrityError(format!("Type without associated category? Type:{} Group:{}", item_type.typeID, item_type.groupID)))?;
+                    if let Some(metagroup) = item_type.metaGroupID {
+                        type_metagroups.insert(item_type.typeID, metagroup);
+                    }
 
                     if item_type.graphicID.is_some() || item_type.iconID.is_some() || (1950..=1955).contains(&item_type.groupID) || item_type.groupID == 4040 {
                         types.insert(item_type.typeID, TypeInfo {
@@ -389,7 +394,26 @@ impl IconBuildData {
                             is_renderable: renderable_types.contains(item_type.typeID, item_type.groupID, item_category),
                             module_slot: None,
                             omega_required: None,
+                            blueprint_output_metagroup: None
                         });
+                    }
+                }
+
+                for blueprint in loader.load_blueprints()? {
+                    let blueprint = blueprint?;
+
+                    if let Some(manufacturing) = blueprint.activities.manufacturing {
+                        if let Some((output, _)) = manufacturing.products.first() {
+                            if let (Some(bp_info), Some(output_group)) =(types.get_mut(&blueprint.blueprintTypeID), type_metagroups.get(output)) {
+                                bp_info.blueprint_output_metagroup = Some(*output_group)
+                            }
+                        }
+                    } else if let Some(reaction) = blueprint.activities.reaction {
+                        if let Some((output, _)) = reaction.products.first() {
+                            if let (Some(bp_info), Some(output_group)) =(types.get_mut(&blueprint.blueprintTypeID), type_metagroups.get(output)) {
+                                bp_info.blueprint_output_metagroup = Some(*output_group)
+                            }
+                        }
                     }
                 }
 
@@ -639,7 +663,7 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     let icon_resource_bpc = format!("{}/{}_64_bpc.png", folder.trim_end_matches('/'), type_info.graphic_id.unwrap());
 
                     if cache.has_resource(&*icon_resource_bp) {
-                        let techoverlay = get_techoverlay(type_info.meta_group_id.unwrap_or(1), icon_config.use_old_overlays);
+                        let techoverlay = get_techoverlay(type_info.meta_group_id.or(type_info.blueprint_output_metagroup).unwrap_or(1), icon_config.use_old_overlays);
                         if let Some((overlay_cache, techoverlay)) = techoverlay.load(cache)? {
                             let index_key = hash::index_key("png", (cache.hash_of(&icon_resource_bp)?, overlay_cache));
                             service_metadata.entry(*type_id).or_default().insert(IconKind::Icon, index_key.clone());
