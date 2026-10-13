@@ -663,7 +663,12 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     let icon_resource_bpc = format!("{}/{}_64_bpc.png", folder.trim_end_matches('/'), type_info.graphic_id.unwrap());
 
                     if cache.has_resource(&*icon_resource_bp) {
-                        let techoverlay = get_techoverlay(type_info.meta_group_id.or(type_info.blueprint_output_metagroup).unwrap_or(1), icon_config.use_old_overlays);
+                        let overlay_metagroup = ids::MetaGroupID::max(
+                            type_info.meta_group_id.unwrap_or(1),
+                            type_info.blueprint_output_metagroup.unwrap_or(1)
+                        );
+
+                        let techoverlay = get_techoverlay(overlay_metagroup, icon_config.use_old_overlays);
                         if let Some((overlay_cache, techoverlay)) = techoverlay.load(cache)? {
                             let index_key = hash::index_key("png", (cache.hash_of(&icon_resource_bp)?, overlay_cache));
                             service_metadata.entry(*type_id).or_default().insert(IconKind::Icon, index_key.clone());
