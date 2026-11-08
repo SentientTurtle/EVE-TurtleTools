@@ -97,6 +97,9 @@ Subject to change: Additional icons may be added. (For requests: Open an issue o
 
 # Changes
 
+## Versions after `3670638`:
+* Added `Service Bundle - Clean`; Contains icons without overlays and overlay metadata file, such that overlays may be applied by users at application runtime.
+
 ## Versions after `3561556`:
 * Added 'Utility Icons'
 
