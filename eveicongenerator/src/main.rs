@@ -1,5 +1,6 @@
 pub const CRATE_NAME: &'static str = env!("CARGO_PKG_NAME");
 pub const CRATE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub const GIT_HASH: Option<&'static str> = option_env!("GIT_HASH");
 pub const CRATE_REPO: &'static str = env!("CARGO_PKG_REPOSITORY");
 
 use crate::icons::{parse_utility_list, IconBuildData, IconConfig, IconError, IconImageFormat, OutputMode};
@@ -34,6 +35,11 @@ fn main() -> ExitCode {
 
 fn do_main() -> Result<(), IconError> {
     let arg_matches = Command::new("eveicongenerator")
+        .version(if let Some(hash) = GIT_HASH {
+            format!("{}-{} +{}", CRATE_VERSION, hash, CRATE_REPO)
+        } else {
+            format!("{} +{}", CRATE_VERSION, CRATE_REPO)
+        })
         .about("Multi-purpose item-icon generator for EVE Online")
         .args([
             Arg::new("user_agent")
@@ -85,6 +91,11 @@ fn do_main() -> Result<(), IconError> {
                 .long("skip_if_fresh")
                 .help("If icons are unchanged, skip output")
                 .action(ArgAction::SetTrue),
+            Arg::new("external_overlays")
+                .long("external_overlays")
+                .help("Hide icon overlays, so they can be applied by users. Adds 'overlays.json' metadata to output. (Caution: Works around game bugs which may be fixed!)")
+                .conflicts_with_all(["old_overlays", "module_overlays", "clone_overlays"])
+                .action(ArgAction::SetTrue),
             Arg::new("old_overlays")
                 .long("old_overlays")
                 .help("Use the old-style glossy overlays for tech-tiers & other info")
@@ -103,7 +114,7 @@ fn do_main() -> Result<(), IconError> {
                 .action(ArgAction::SetTrue),
             Arg::new("image_format")
                 .long("image_format")
-                .help("Force image format (CAUTION: Not cached!)")
+                .help("Force image format (CAUTION: Non-native formats are not cached!)")
                 .value_parser(["native", #[cfg(feature = "webp")] "webp"]),
             Arg::new("image_quality")
                 .long("image_quality")
@@ -399,13 +410,18 @@ fn do_main() -> Result<(), IconError> {
     };
 
     use std::fmt::Write;    // Write into string
-    write!(&mut user_agent, " turtletools:{}/{} +{}", CRATE_NAME, CRATE_VERSION, CRATE_REPO).expect("write into string should not fail!");
+    if let Some(hash) = GIT_HASH {
+        write!(&mut user_agent, " turtletools:{}/{}-{} +{}", CRATE_NAME, CRATE_VERSION, hash, CRATE_REPO).expect("write into string should not fail!");
+    } else {
+        write!(&mut user_agent, " turtletools:{}/{} +{}", CRATE_NAME, CRATE_VERSION, CRATE_REPO).expect("write into string should not fail!");
+    }
 
     let silent_mode = arg_matches.get_flag("silent"); // icons::build_icon_export overrides this to `true` if "checksum to stdout" is present
     let skip_if_fresh = arg_matches.get_flag("skip_if_fresh");
     let no_purge = arg_matches.get_flag("no_purge");
 
     let icon_config = IconConfig {
+        external_overlays: arg_matches.get_flag("external_overlays"),
         use_old_overlays: arg_matches.get_flag("old_overlays"),
         module_overlays: arg_matches.get_flag("module_overlays"),
         clone_overlays: arg_matches.get_flag("clone_overlays"),

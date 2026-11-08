@@ -1,8 +1,19 @@
 use std::error::Error;
-
+use std::fs::File;
+use evestaticdata::sde::load::SDELoader;
 
 #[allow(unreachable_code)]
 pub fn main() -> Result<(), Box<dyn Error>> {
+    let mut loader = SDELoader::open_latest("./temp/sde.zip")?;
+    drop(loader.full()?);
+
+    evestaticdata::sde::npc::build_npc_data(
+        &mut loader,
+        &mut File::create("./NPC_Data.jsonl")?
+    )?;
+
+    return Ok(());
+
     #[cfg(all(feature = "sde_update", feature="sde_diff"))] {
         use std::ffi::OsString;
         use std::fs;

@@ -119,14 +119,25 @@ pub struct ChangeLogEntry {
 }
 
 pub fn download_latest_sde<P: AsRef<Path>>(file: P) -> Result<SdeVersion, io::Error> {
-    reqwest::blocking::get(SDE_URL).map_err(io::Error::other)?
-        .copy_to(&mut File::create(&file)?).map(|_| ()).map_err(io::Error::other)?;
+    match reqwest::blocking::get(SDE_URL) {
+        Ok(mut resp) => {
+            match resp.copy_to(&mut File::create(&file)?).map(|_| ()) {
+                Ok(()) => {}
+                Err(err) => {
+                    // Attempt to remove file as it may have been corrupted by a partial write
+                    fs::remove_file(file).unwrap_or(());
+                    return Err(io::Error::other(err))?
+                }
+            }
+        }
+        Err(err) => return Err(io::Error::other(err))?,
+    }
 
     SdeVersion::from_sde_zip(file)
 }
 
 pub fn update_sde<P: AsRef<Path>>(file: P) -> Result<SdeVersion, io::Error> {
-    let current @ SdeVersion::sde { buildNumber: current_version, .. } = SdeVersion::try_sde_zip(&file)?;
+    let current @ SdeVersion::sde { buildNumber: current_version, .. } = SdeVersion::try_sde_zip(&file).unwrap_or(SdeVersion::sde { buildNumber: 0, releaseDate: None });
     let SdeVersion::sde { buildNumber: latest, .. } = SdeVersion::fetch_latest()?;
     if current_version < latest {
         download_latest_sde(file)

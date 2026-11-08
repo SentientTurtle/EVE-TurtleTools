@@ -13,6 +13,7 @@ use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::{io, mem};
 use std::borrow::Cow;
+use std::sync::{LazyLock, Mutex};
 use fs_err as fs;
 use fs_err::File;
 use regex::Regex;
@@ -98,6 +99,7 @@ pub mod hash {
 
 #[derive(Debug, Copy, Clone)]
 pub struct IconConfig {
+    pub external_overlays: bool,
     pub use_old_overlays: bool,
     pub module_overlays: bool,
     pub clone_overlays: bool,
@@ -186,23 +188,163 @@ pub struct GraphicInfo {
     pub hull: Option<String>
 }
 
+static OVERLAY_CACHE: LazyLock<Mutex<HashMap<&'static str, &'static DynamicImage>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+// Overlays are declared static so their metadata exists only once in the binary. ("::Bytes" overlays include the image data and mustn't be duplicated)
+static NEW_OVERLAY_T1: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_241.png", identifier: "meta-t1" };
+static NEW_OVERLAY_T2: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_242.png", identifier: "meta-t2" };
+static NEW_OVERLAY_STORYLINE: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_245.png", identifier: "meta-storyline" };
+static NEW_OVERLAY_FACTION: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_246.png", identifier: "meta-faction" };
+static NEW_OVERLAY_OFFICER: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_248.png", identifier: "meta-officer" };
+static NEW_OVERLAY_DEADSPACE: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_247.png", identifier: "meta-deadspace" };
+static NEW_OVERLAY_T3: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_243.png", identifier: "meta-t3" };
+static NEW_OVERLAY_ABYSSAL: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/abyssal.png", identifier: "meta-abyssal" };
+static NEW_OVERLAY_NES: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/nes.png", identifier: "meta-nes" };
+static NEW_OVERLAY_TIMELIMITED: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/timelimited.png", identifier: "meta-timelimited" };
+static NEW_OVERLAY_STRUCTURE_FACTION: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlayfaction.png", identifier: "meta-structure-faction" };
+static NEW_OVERLAY_STRUCTURE_T2: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlayt2.png", identifier: "meta-structure-t2" };
+static NEW_OVERLAY_STRUCTURE_T1: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlay.png", identifier: "meta-structure-t1" };
+static NEW_OVERLAY_MODULE_HIGH: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_123.png", identifier: "module-high" };
+static NEW_OVERLAY_MODULE_MEDIUM: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_122.png", identifier: "module-medium" };
+static NEW_OVERLAY_MODULE_LOW: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_121.png", identifier: "module-low" };
+static NEW_OVERLAY_MODULE_RIG: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_124.png", identifier: "module-rig" };
+static NEW_OVERLAY_MODULE_SUBSYSTEM: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_42.png", identifier: "module-subsystem" };
+static NEW_OVERLAY_CLONE_ALPHA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/new/Alpha.png"), cachekey: "alpha-new", identifier: "clone-alpha" };
+static NEW_OVERLAY_CLONE_OMEGA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/new/Omega.png"), cachekey: "omega-new", identifier: "clone-omega" };
+
+static OLD_OVERLAY_T1: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Tech 1.png"), cachekey: "t1-old", identifier: "meta-t1" };
+static OLD_OVERLAY_T2: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Tech 2.png"), cachekey: "t2-old", identifier: "meta-t2" };
+static OLD_OVERLAY_STORYLINE: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Storyline.png"), cachekey: "storyline-old", identifier: "meta-storyline" };
+static OLD_OVERLAY_FACTION: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Faction.png"), cachekey: "faction-old", identifier: "meta-faction" };
+static OLD_OVERLAY_OFFICER: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Officer.png"), cachekey: "officer-old", identifier: "meta-officer" };
+static OLD_OVERLAY_DEADSPACE: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Deadspace.png"), cachekey: "deadspace-old", identifier: "meta-deadspace" };
+static OLD_OVERLAY_T3: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Tech 3.png"), cachekey: "t3-old", identifier: "meta-t3" };
+static OLD_OVERLAY_ABYSSAL: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Abyssal.png"), cachekey: "abyssal-old", identifier: "meta-abyssal" };
+static OLD_OVERLAY_NES: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/NES.png"), cachekey: "nes-old", identifier: "meta-nes" };
+static OLD_OVERLAY_TIMELIMITED: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Time Limited.png"), cachekey: "timelimited-old", identifier: "meta-timelimited" };
+static OLD_OVERLAY_STRUCTURE_FACTION: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Faction.png"), cachekey: "structurefaction-old", identifier: "meta-structure-faction" };
+static OLD_OVERLAY_STRUCTURE_T2: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Tech 2.png"), cachekey: "structuret2-old", identifier: "meta-structure-t2" };
+static OLD_OVERLAY_STRUCTURE_T1: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Tech 1.png"), cachekey: "structuret1-old", identifier: "meta-structure-t1" };
+const OLD_OVERLAY_MODULE_HIGH: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-High.png"), cachekey: "slot-high-old", identifier: "module-high" };
+const OLD_OVERLAY_MODULE_MEDIUM: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Med.png"), cachekey: "slot-med-old", identifier: "module-medium" };
+const OLD_OVERLAY_MODULE_LOW: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Low.png"), cachekey: "slot-low-old", identifier: "module-low" };
+const OLD_OVERLAY_MODULE_RIG: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Rig.png"), cachekey: "slot-rig-old", identifier: "module-rig" };
+const OLD_OVERLAY_MODULE_SUBSYSTEM: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Subsystem.png"), cachekey: "slot-subsystem-old", identifier: "module-subsystem" };
+const OLD_OVERLAY_CLONE_OMEGA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Omega.png"), cachekey: "omega-old", identifier: "clone-omega" };
+const OLD_OVERLAY_CLONE_ALPHA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Alpha.png"), cachekey: "alpha-old", identifier: "clone-alpha" };
+
+static NEW_OVERLAY_LIST: &[&IconOverlay] = &[
+    &NEW_OVERLAY_T1,
+    &NEW_OVERLAY_T2,
+    &NEW_OVERLAY_STORYLINE,
+    &NEW_OVERLAY_FACTION,
+    &NEW_OVERLAY_OFFICER,
+    &NEW_OVERLAY_DEADSPACE,
+    &NEW_OVERLAY_T3,
+    &NEW_OVERLAY_ABYSSAL,
+    &NEW_OVERLAY_NES,
+    &NEW_OVERLAY_TIMELIMITED,
+    &NEW_OVERLAY_STRUCTURE_FACTION,
+    &NEW_OVERLAY_STRUCTURE_T2,
+    &NEW_OVERLAY_STRUCTURE_T1,
+    &NEW_OVERLAY_MODULE_HIGH,
+    &NEW_OVERLAY_MODULE_MEDIUM,
+    &NEW_OVERLAY_MODULE_LOW,
+    &NEW_OVERLAY_MODULE_RIG,
+    &NEW_OVERLAY_MODULE_SUBSYSTEM,
+    &NEW_OVERLAY_CLONE_ALPHA,
+    &NEW_OVERLAY_CLONE_OMEGA
+];
+static OLD_OVERLAY_LIST: &[&IconOverlay] = &[
+    &OLD_OVERLAY_T1,
+    &OLD_OVERLAY_T2,
+    &OLD_OVERLAY_STORYLINE,
+    &OLD_OVERLAY_FACTION,
+    &OLD_OVERLAY_OFFICER,
+    &OLD_OVERLAY_DEADSPACE,
+    &OLD_OVERLAY_T3,
+    &OLD_OVERLAY_ABYSSAL,
+    &OLD_OVERLAY_NES,
+    &OLD_OVERLAY_TIMELIMITED,
+    &OLD_OVERLAY_STRUCTURE_FACTION,
+    &OLD_OVERLAY_STRUCTURE_T2,
+    &OLD_OVERLAY_STRUCTURE_T1,
+    &OLD_OVERLAY_MODULE_HIGH,
+    &OLD_OVERLAY_MODULE_MEDIUM,
+    &OLD_OVERLAY_MODULE_LOW,
+    &OLD_OVERLAY_MODULE_RIG,
+    &OLD_OVERLAY_MODULE_SUBSYSTEM,
+    &OLD_OVERLAY_CLONE_ALPHA,
+    &OLD_OVERLAY_CLONE_OMEGA
+];
+
+const BPO_PATCH: IconOverlay = IconOverlay::Bytes {
+    image: include_bytes!("rsc/patch/BPO.png"),
+    cachekey: "patch-BPO",
+    identifier: "patch-BPO",
+};
+const BPC_PATCH: IconOverlay = IconOverlay::Bytes {
+    image: include_bytes!("rsc/patch/BPC.png"),
+    cachekey: "patch-BPC",
+    identifier: "patch-BPC",
+};
+
 #[derive(Copy, Clone)]
 pub enum IconOverlay {  // TODO: Cache parsed images
     None,
-    Resource(&'static str),
-    Bytes(&'static [u8], &'static str)
+    Resource { resource: &'static str, identifier: &'static str },
+    Bytes { image: &'static [u8], cachekey: &'static str, identifier: &'static str }
 }
 
 impl IconOverlay {
-    pub fn load<C: SharedCache>(self, cache: &C) -> Result<Option<(&str, DynamicImage)>, IconError> {
+    pub fn retain_if(self, retain: bool) -> Self {
+        if retain {
+            self
+        } else {
+            Self::None
+        }
+    }
+
+    pub fn load<C: SharedCache>(self, cache: &C) -> Result<Option<(&str, &'static DynamicImage)>, IconError> {
         match self {
             IconOverlay::None => Ok(None),
-            IconOverlay::Resource(res) => Ok(Some((cache.hash_of(res)?, ImageReader::open(cache.path_of(res)?)?.with_guessed_format()?.decode()?.resize_exact(16, 16, FilterType::Lanczos3)))),
-            IconOverlay::Bytes(bytes, name) => {
-                let mut reader = ImageReader::new(Cursor::new(bytes));
-                reader.set_format(ImageFormat::Png);
-                Ok(Some((name, reader.decode()?.resize_exact(16, 16, FilterType::Lanczos3))))
+            IconOverlay::Resource { resource, identifier } => {
+                let mut overlay_cache = OVERLAY_CACHE.lock().expect("Unexpected panic in overlay loading");
+                if let Some(overlay) = overlay_cache.get(identifier) {
+                    Ok(Some((cache.hash_of(resource)?, overlay)))
+                } else {
+                    // The overlays are small, reused often, and loaded once, so throw them onto the heap with Box::leak() for caching
+                    let overlay = Box::leak(Box::new(
+                        ImageReader::open(cache.path_of(resource)?)?.with_guessed_format()?.decode()?.resize_exact(16, 16, FilterType::Lanczos3)
+                    ));
+                    overlay_cache.insert(identifier, overlay);
+                    Ok(Some((cache.hash_of(resource)?, overlay)))
+                }
             }
+            IconOverlay::Bytes { image: bytes, cachekey, identifier } => {
+                let mut overlay_cache = OVERLAY_CACHE.lock().expect("Unexpected panic in overlay loading");
+
+                if let Some(overlay) = overlay_cache.get(identifier) {
+                    Ok(Some((cachekey, overlay)))
+                } else {
+                    // The overlays are small, reused often, and loaded once, so throw them onto the heap with Box::leak() for caching
+                    let overlay = Box::leak(Box::new({
+                        let mut reader = ImageReader::new(Cursor::new(bytes));
+                        reader.set_format(ImageFormat::Png);
+                        reader.decode()?.resize_exact(16, 16, FilterType::Lanczos3)
+                    }));
+                    overlay_cache.insert(identifier, overlay);
+                    Ok(Some((cachekey, overlay)))
+                }
+            }
+        }
+    }
+
+    pub fn identifier(&self) -> Option<&'static str> {
+        match self {
+            IconOverlay::None => None,
+            IconOverlay::Resource { identifier, .. } => Some(identifier),
+            IconOverlay::Bytes { identifier, .. } => Some(identifier),
         }
     }
 }
@@ -211,35 +353,35 @@ pub fn get_techoverlay(metagroup_id: u32, use_old_style: bool) -> IconOverlay {
     if use_old_style {
         match metagroup_id {
             1 => IconOverlay::None,
-            2 => IconOverlay::Bytes(include_bytes!("./rsc/Tech 2.png"), "t2-old"),
-            3 => IconOverlay::Bytes(include_bytes!("./rsc/Storyline.png"), "storyline-old"),
-            4 => IconOverlay::Bytes(include_bytes!("./rsc/Faction.png"), "faction-old"),
-            5 => IconOverlay::Bytes(include_bytes!("./rsc/Officer.png"), "officer-old"),
-            6 => IconOverlay::Bytes(include_bytes!("./rsc/Deadspace.png"), "deadspace-old"),
-            14 => IconOverlay::Bytes(include_bytes!("./rsc/Tech 3.png"), "t3-old"),
-            15 => IconOverlay::Bytes(include_bytes!("./rsc/Abyssal.png"), "abyssal-old"),
-            17 => IconOverlay::Bytes(include_bytes!("./rsc/NES.png"), "nes-old"),
-            19 => IconOverlay::Bytes(include_bytes!("./rsc/Time Limited.png"), "timelimited-old"),
-            52 => IconOverlay::Bytes(include_bytes!("./rsc/Structure Faction.png"), "structurefaction-old"),
-            53 => IconOverlay::Bytes(include_bytes!("./rsc/Structure Tech 2.png"), "structuret2-old"),
-            54 => IconOverlay::Bytes(include_bytes!("./rsc/Structure Tech 1.png"), "structuret1-old"),
+            2 => OLD_OVERLAY_T2,
+            3 => OLD_OVERLAY_STORYLINE,
+            4 => OLD_OVERLAY_FACTION,
+            5 => OLD_OVERLAY_OFFICER,
+            6 => OLD_OVERLAY_DEADSPACE,
+            14 => OLD_OVERLAY_T3,
+            15 => OLD_OVERLAY_ABYSSAL,
+            17 => OLD_OVERLAY_NES,
+            19 => OLD_OVERLAY_TIMELIMITED,
+            52 => OLD_OVERLAY_STRUCTURE_FACTION,
+            53 => OLD_OVERLAY_STRUCTURE_T2,
+            54 => OLD_OVERLAY_STRUCTURE_T1,
             _ => IconOverlay::None
         }
     } else {
         match metagroup_id {
             1 => IconOverlay::None,
-            2 => IconOverlay::Resource("res:/ui/texture/icons/73_16_242.png"),
-            3 => IconOverlay::Resource("res:/ui/texture/icons/73_16_245.png"),
-            4 => IconOverlay::Resource("res:/ui/texture/icons/73_16_246.png"),
-            5 => IconOverlay::Resource("res:/ui/texture/icons/73_16_248.png"),
-            6 => IconOverlay::Resource("res:/ui/texture/icons/73_16_247.png"),
-            14 => IconOverlay::Resource("res:/ui/texture/icons/73_16_243.png"),
-            15 => IconOverlay::Resource("res:/ui/texture/icons/itemoverlay/abyssal.png"),
-            17 => IconOverlay::Resource("res:/ui/texture/icons/itemoverlay/nes.png"),
-            19 => IconOverlay::Resource("res:/ui/texture/icons/itemoverlay/timelimited.png"),
-            52 => IconOverlay::Resource("res:/ui/texture/shared/structureoverlayfaction.png"),
-            53 => IconOverlay::Resource("res:/ui/texture/shared/structureoverlayt2.png"),
-            54 => IconOverlay::Resource("res:/ui/texture/shared/structureoverlay.png"),
+            2 => NEW_OVERLAY_T2,
+            3 => NEW_OVERLAY_STORYLINE,
+            4 => NEW_OVERLAY_FACTION,
+            5 => NEW_OVERLAY_OFFICER,
+            6 => NEW_OVERLAY_DEADSPACE,
+            14 => NEW_OVERLAY_T3,
+            15 => NEW_OVERLAY_ABYSSAL,
+            17 => NEW_OVERLAY_NES,
+            19 => NEW_OVERLAY_TIMELIMITED,
+            52 => NEW_OVERLAY_STRUCTURE_FACTION,
+            53 => NEW_OVERLAY_STRUCTURE_T2,
+            54 => NEW_OVERLAY_STRUCTURE_T1,
             _ => IconOverlay::None
         }
     }
@@ -250,20 +392,21 @@ pub fn get_moduleoverlay(module_slot: Option<ModuleSlot>, use_old_style: bool) -
     if use_old_style {
         match module_slot {
             None => IconOverlay::None,
-            Some(ModuleSlot::High) => IconOverlay::Resource("res:/ui/texture/icons/38_16_123.png"),
-            Some(ModuleSlot::Medium) => IconOverlay::Resource("res:/ui/texture/icons/38_16_122.png"),
-            Some(ModuleSlot::Low) => IconOverlay::Resource("res:/ui/texture/icons/38_16_121.png"),
-            Some(ModuleSlot::Rig) => IconOverlay::Resource("res:/ui/texture/icons/38_16_124.png"),
-            Some(ModuleSlot::Subsystem) => IconOverlay::Resource("res:/ui/texture/icons/38_16_42.png")
+            Some(ModuleSlot::High) => OLD_OVERLAY_MODULE_HIGH,
+            Some(ModuleSlot::Medium) => OLD_OVERLAY_MODULE_MEDIUM,
+            Some(ModuleSlot::Low) => OLD_OVERLAY_MODULE_LOW,
+            Some(ModuleSlot::Rig) => OLD_OVERLAY_MODULE_RIG,
+            Some(ModuleSlot::Subsystem) => OLD_OVERLAY_MODULE_SUBSYSTEM
         }
     } else {
         match module_slot {
             None => IconOverlay::None,
-            Some(ModuleSlot::High) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-High.png"), "slot-high-old"),
-            Some(ModuleSlot::Medium) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Med.png"), "slot-med-old"),
-            Some(ModuleSlot::Low) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Low.png"), "slot-low-old"),
-            Some(ModuleSlot::Rig) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Rig.png"), "slot-rig-old"),
-            Some(ModuleSlot::Subsystem) => IconOverlay::Bytes(include_bytes!("./rsc/Slot-Subsystem.png"), "slot-subsystem-old")
+            Some(ModuleSlot::High) => NEW_OVERLAY_MODULE_HIGH,
+            Some(ModuleSlot::Medium) => NEW_OVERLAY_MODULE_MEDIUM,
+            Some(ModuleSlot::Low) => NEW_OVERLAY_MODULE_LOW,
+            Some(ModuleSlot::Rig) => NEW_OVERLAY_MODULE_RIG,
+            Some(ModuleSlot::Subsystem) => NEW_OVERLAY_MODULE_SUBSYSTEM
+            // TODO: Possibly port over non-canonical service module overlay
         }
     }
 }
@@ -272,14 +415,14 @@ pub fn get_cloneoverlay(requires_omega: Option<bool>, use_old_style: bool) -> Ic
     if use_old_style {
         match requires_omega {
             None => IconOverlay::None,
-            Some(true) => IconOverlay::Bytes(include_bytes!("./rsc/Omega-Old.png"), "omega-old"),
-            Some(false) => IconOverlay::Bytes(include_bytes!("./rsc/Alpha-Old.png"), "alpha-old")
+            Some(true) => OLD_OVERLAY_CLONE_OMEGA,
+            Some(false) => OLD_OVERLAY_CLONE_ALPHA
         }
     } else {
         match requires_omega {
             None => IconOverlay::None,
-            Some(true) => IconOverlay::Bytes(include_bytes!("./rsc/Omega-New.png"), "omega-new"),
-            Some(false) => IconOverlay::Bytes(include_bytes!("./rsc/Alpha-New.png"), "alpha-new")
+            Some(true) => NEW_OVERLAY_CLONE_OMEGA,
+            Some(false) => NEW_OVERLAY_CLONE_ALPHA
         }
     }
 }
@@ -417,9 +560,9 @@ impl IconBuildData {
                     }
                 }
 
-                if icon_config.clone_overlays || icon_config.module_overlays {
+                if icon_config.clone_overlays || icon_config.module_overlays || icon_config.external_overlays {
                     let mut alpha_skills = HashMap::<ids::TypeID, values::SkillLevel>::new();
-                    if icon_config.clone_overlays {
+                    if icon_config.clone_overlays || icon_config.external_overlays {
                         for clone_grade in loader.load_clone_grades()? {
                             let clone_grade = clone_grade?;
                             alpha_skills.extend(clone_grade.skills);
@@ -437,13 +580,15 @@ impl IconBuildData {
                         let type_dogma = type_dogma?;
                         if let Some(item_type) = types.get_mut(&type_dogma.typeID) {
 
-                            if type_dogma.dogmaEffects.contains_key(&11) { item_type.module_slot = Some(ModuleSlot::Low); }
-                            if type_dogma.dogmaEffects.contains_key(&13) { item_type.module_slot = Some(ModuleSlot::Medium); }
-                            if type_dogma.dogmaEffects.contains_key(&12) { item_type.module_slot = Some(ModuleSlot::High); }
-                            if type_dogma.dogmaEffects.contains_key(&2663) { item_type.module_slot = Some(ModuleSlot::Rig); }
-                            if type_dogma.dogmaEffects.contains_key(&3772) { item_type.module_slot = Some(ModuleSlot::Subsystem); }
+                            if icon_config.module_overlays || icon_config.external_overlays {
+                                if type_dogma.dogmaEffects.contains_key(&11) { item_type.module_slot = Some(ModuleSlot::Low); }
+                                if type_dogma.dogmaEffects.contains_key(&13) { item_type.module_slot = Some(ModuleSlot::Medium); }
+                                if type_dogma.dogmaEffects.contains_key(&12) { item_type.module_slot = Some(ModuleSlot::High); }
+                                if type_dogma.dogmaEffects.contains_key(&2663) { item_type.module_slot = Some(ModuleSlot::Rig); }
+                                if type_dogma.dogmaEffects.contains_key(&3772) { item_type.module_slot = Some(ModuleSlot::Subsystem); }
+                            }
 
-                            if icon_config.clone_overlays {
+                            if icon_config.clone_overlays || icon_config.external_overlays {
                                 // For skills, set requirement directly. For other items, determine requirement from required skills
                                 if group_categories.get(&item_type.group_id) == Some(&16) {
                                     item_type.omega_required = Some(!alpha_skills.contains_key(&type_dogma.typeID))
@@ -640,6 +785,7 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
     }
 
     let mut service_metadata = BTreeMap::<u32, BTreeMap<IconKind, String>>::new();
+    let mut overlay_metadata = BTreeMap::<u32, HashSet<&'static str>>::new();
     let mut new_index = HashSet::<String>::new();
 
     fn is_up_to_date(old_index: &HashSet<String>, new_index: &mut HashSet<String>, index_key: &str, force_rebuild: bool) -> bool {
@@ -668,27 +814,58 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                             type_info.blueprint_output_metagroup.unwrap_or(1)
                         );
 
-                        let techoverlay = get_techoverlay(overlay_metagroup, icon_config.use_old_overlays);
-                        if let Some((overlay_cache, techoverlay)) = techoverlay.load(cache)? {
-                            let index_key = hash::index_key("png", (cache.hash_of(&icon_resource_bp)?, overlay_cache));
+                        let mut techoverlay = get_techoverlay(overlay_metagroup, icon_config.use_old_overlays);
+                        if let Some(overlay_identifier) = techoverlay.identifier() { overlay_metadata.entry(*type_id).or_default().insert(overlay_identifier); };
+
+                        // Patch blueprints which may have an overlay burned into them
+                        // Skip for types which don't need patching, i.e. metagroup 1 & no overlay
+                        // Basilisk blueprint extends into the otherwise clipped corner and doesn't have an overlay to patch out, so skip patching for it
+                        if icon_config.external_overlays && overlay_metagroup != 1 && *type_id != 11986 {
+                            let index_key = hash::index_key("png", ("clean", cache.hash_of(&icon_resource_bp)?));
+                            service_metadata.entry(*type_id).or_default().insert(IconKind::Icon, index_key.clone());
+                            service_metadata.entry(*type_id).or_default().insert(IconKind::Blueprint, index_key.clone());
+                            if !is_up_to_date(&old_index, &mut new_index, &index_key, force_rebuild) {
+                                let mut image = ImageReader::open(&cache.path_of(&*icon_resource_bp)?)?.with_guessed_format()?.decode()?
+                                    .resize_exact(64, 64, FilterType::Lanczos3);
+                                imageops::overlay(&mut image, BPO_PATCH.load(cache)?.map(|(_, img)| img).expect("overlay patches are included in the binary, so loading must not fail"), 0, 0);
+                                image.save(&icon_dir.join(index_key))?;
+                            }
+
+                            let index_key = hash::index_key("png", ("clean", cache.hash_of(&icon_resource_bpc)?));
+                            service_metadata.entry(*type_id).or_default().insert(IconKind::BlueprintCopy, index_key.clone());
+                            if !is_up_to_date(&old_index, &mut new_index, &index_key, force_rebuild) {
+                                let mut image = ImageReader::open(&cache.path_of(&*icon_resource_bpc)?)?.with_guessed_format()?.decode()?
+                                    .resize_exact(64, 64, FilterType::Lanczos3);
+                                imageops::overlay(&mut image, BPC_PATCH.load(cache)?.map(|(_, img)| img).expect("overlay patches are included in the binary, so loading must not fail"), 0, 0);
+                                image.save(&icon_dir.join(index_key))?;
+                            }
+
+                            continue;
+                        }
+
+                        techoverlay = techoverlay.retain_if(!icon_config.external_overlays);
+
+                        if let Some((overlay_cache_key, techoverlay)) = techoverlay.load(cache)? {
+                            let index_key = hash::index_key("png", (cache.hash_of(&icon_resource_bp)?, overlay_cache_key));
                             service_metadata.entry(*type_id).or_default().insert(IconKind::Icon, index_key.clone());
                             service_metadata.entry(*type_id).or_default().insert(IconKind::Blueprint, index_key.clone());
                             if !is_up_to_date(&old_index, &mut new_index, &index_key, force_rebuild) {
                                 let mut image = ImageReader::open(&cache.path_of(&*icon_resource_bp)?)?.with_guessed_format()?.decode()?.resize_exact(64, 64, FilterType::Lanczos3);
-                                imageops::overlay(&mut image, &techoverlay, 0, 0);
+                                imageops::overlay(&mut image, techoverlay, 0, 0);
                                 image.save(&icon_dir.join(index_key))?;
                             }
 
                             if cache.has_resource(&*icon_resource_bpc) {
-                                let index_key = hash::index_key("png", (cache.hash_of(&icon_resource_bpc)?, overlay_cache));
+                                let index_key = hash::index_key("png", (cache.hash_of(&icon_resource_bpc)?, overlay_cache_key));
                                 service_metadata.entry(*type_id).or_default().insert(IconKind::BlueprintCopy, index_key.clone());
                                 if !is_up_to_date(&old_index, &mut new_index, &index_key, force_rebuild) {
                                     let mut image = ImageReader::open(&cache.path_of(&*icon_resource_bpc)?)?.with_guessed_format()?.decode()?
                                         .resize_exact(64, 64, FilterType::Lanczos3);
-                                    imageops::overlay(&mut image, &techoverlay, 0, 0);
+                                    imageops::overlay(&mut image, techoverlay, 0, 0);
                                     image.save(&icon_dir.join(index_key))?;
                                 }
                             }
+                            continue;
                         } else {
                             let index_key = hash::index_key("png", cache.hash_of(&icon_resource_bp)?);
                             service_metadata.entry(*type_id).or_default().insert(IconKind::Icon, index_key.clone());
@@ -708,6 +885,7 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                                     image.save(&icon_dir.join(index_key))?;
                                 }
                             }
+                            continue;
                         }
                     } else {
                         // Missing file
@@ -718,7 +896,9 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                 } else if let Some(icon) = type_info.icon_id { // If no graphics icon, try icon
                     let icon_resource = &*data.icon_files.get(&icon).ok_or(IconError::String(format!("unknown icon id: {}", icon)))?;
                     if cache.has_resource(&icon_resource) {
-                        let (techoverlay_cache, techoverlay) = get_techoverlay(type_info.meta_group_id.unwrap_or(1), icon_config.use_old_overlays).load(cache)?.unzip();
+                        let techoverlay = get_techoverlay(type_info.meta_group_id.unwrap_or(1), icon_config.use_old_overlays);
+                        if let Some(overlay_identifier) = techoverlay.identifier() { overlay_metadata.entry(*type_id).or_default().insert(overlay_identifier); };
+                        let (techoverlay_cache, techoverlay_image) = techoverlay.retain_if(!icon_config.external_overlays).load(cache)?.unzip();
 
                         if type_info.category_id == 34 {
                             let index_key = hash::index_key("png", (
@@ -736,10 +916,11 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                                     &cache.path_of("res:/ui/texture/icons/relic.png")?,
                                     &cache.path_of("res:/ui/texture/icons/relic_overlay.png")?,
                                     &cache.path_of(icon_resource)?,
-                                    techoverlay.as_ref(),
+                                    techoverlay_image,
                                     &icon_dir.join(index_key)
                                 )?;
                             }
+                            continue;
                         } else if REACTION_GROUPS.contains(&type_info.group_id) {
                             let index_key = hash::index_key("png", (
                                 cache.hash_of(&icon_resource)?,
@@ -757,10 +938,11 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                                     &cache.path_of("res:/ui/texture/icons/reaction.png")?,
                                     &cache.path_of("res:/ui/texture/icons/bpo_overlay.png")?,
                                     &cache.path_of(icon_resource)?,
-                                    techoverlay.as_ref(),
+                                    techoverlay_image,
                                     &icon_dir.join(index_key)
                                 )?;
                             }
+                            continue;
                         } else {
                             let index_key = hash::index_key("png", (
                                 cache.hash_of(&icon_resource)?,
@@ -777,7 +959,7 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                                     &cache.path_of("res:/ui/texture/icons/bpo.png")?,
                                     &cache.path_of("res:/ui/texture/icons/bpo_overlay.png")?,
                                     &cache.path_of(icon_resource)?,
-                                    techoverlay.as_ref(),
+                                    techoverlay_image,
                                     &icon_dir.join(index_key)
                                 )?;
                             }
@@ -794,10 +976,11 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                                     &cache.path_of("res:/ui/texture/icons/bpc.png")?,
                                     &cache.path_of("res:/ui/texture/icons/bpc_overlay.png")?,
                                     &cache.path_of(icon_resource)?,
-                                    techoverlay.as_ref(),
+                                    techoverlay_image,
                                     &icon_dir.join(index_key)
                                 )?;
                             }
+                            continue;
                         }
                     } else {
                         // Skip missing icons, sometimes they're broken in-game.
@@ -810,6 +993,15 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                 }
             } else {
                 // Regular item
+                let techoverlay = get_techoverlay(type_info.meta_group_id.unwrap_or(1), icon_config.use_old_overlays);
+                let moduleoverlay = get_moduleoverlay(type_info.module_slot, icon_config.use_old_overlays);
+                let cloneoverlay = get_cloneoverlay(type_info.omega_required, icon_config.use_old_overlays);
+                for overlay in [techoverlay, moduleoverlay, cloneoverlay] {
+                    if let Some(overlay_identifier) = overlay.identifier() {
+                        overlay_metadata.entry(*type_id).or_default().insert(overlay_identifier);
+                    }
+                }
+
                 let graphic_info = type_info.graphic_id.and_then(|graphic_id| data.graphics_folders.get(&graphic_id));
 
                 let mut icon_resource;
@@ -832,6 +1024,19 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                         if !is_up_to_date(&old_index, &mut new_index, &index_key, force_rebuild) {
                             let _ = fs::copy(cache.path_of(&*render_resource)?, icon_dir.join(index_key)).map_err(IconError::from)?;
                         }
+
+                        if icon_config.external_overlays {
+                            let index_key = hash::index_key("png", ("downscale", cache.hash_of(&render_resource)?));
+                            if !is_up_to_date(&old_index, &mut new_index, &index_key, force_rebuild) {
+                                ImageReader::open(&cache.path_of(&render_resource)?)?
+                                    .with_guessed_format()?
+                                    .decode()?
+                                    .resize_exact(64, 64, FilterType::Lanczos3)
+                                    .save(&icon_dir.join(&index_key))?;
+                            }
+                            service_metadata.entry(*type_id).or_default().insert(IconKind::Icon, index_key.clone());
+                            continue;   // Special-case icon has been built, skip general icon logic.
+                        }
                     }
                 } else if let Some(icon) = type_info.icon_id {
                     icon_resource = data.icon_files.get(&icon).ok_or(IconError::String(format!("unknown icon id: {}", icon)))?.clone();
@@ -852,9 +1057,9 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     continue; // Skip missing icons, sometimes they're broken in-game.
                 }
 
-                let techoverlay = get_techoverlay(type_info.meta_group_id.unwrap_or(1), icon_config.use_old_overlays).load(cache)?;
-                let moduleoverlay = get_moduleoverlay(type_info.module_slot, icon_config.use_old_overlays).load(cache)?;
-                let cloneoverlay = get_cloneoverlay(type_info.omega_required, icon_config.use_old_overlays).load(cache)?;
+                let techoverlay = techoverlay.retain_if(!icon_config.external_overlays).load(cache)?;
+                let moduleoverlay = moduleoverlay.retain_if(!icon_config.external_overlays).load(cache)?;
+                let cloneoverlay = cloneoverlay.retain_if(!icon_config.external_overlays).load(cache)?;
 
                 if let (None, None, None) = (&techoverlay, &moduleoverlay, &cloneoverlay) {
                     // These icons are still resized, and so are copied to the icon-cache folder
@@ -865,10 +1070,11 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                         let image = ImageReader::open(&cache.path_of(&*icon_resource)?)?.with_guessed_format()?.decode()?.resize_exact(64, 64, FilterType::Lanczos3);
                         image.save(&icon_dir.join(index_key))?;
                     }
+                    continue;
                 } else {
-                    let (techoverlay_cache, techoverlay) = techoverlay.unzip();
-                    let (moduleoverlay_cache, moduleoverlay) = moduleoverlay.unzip();
-                    let (cloneoverlay_cache, cloneoverlay) = cloneoverlay.unzip();
+                    let (techoverlay_cache, techoverlay_image) = techoverlay.unzip();
+                    let (moduleoverlay_cache, moduleoverlay_image) = moduleoverlay.unzip();
+                    let (cloneoverlay_cache, cloneoverlay_image) = cloneoverlay.unzip();
 
                     let index_key = hash::index_key("png", (
                         cache.hash_of(&*icon_resource)?,
@@ -881,17 +1087,18 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
 
                     if !is_up_to_date(&old_index, &mut new_index, &index_key, force_rebuild) {
                         let mut image = ImageReader::open(&cache.path_of(&icon_resource)?)?.with_guessed_format()?.decode()?.resize_exact(64, 64, FilterType::Lanczos3);
-                        if let Some(techoverlay) = techoverlay {
-                            imageops::overlay(&mut image, &techoverlay, 0, 0);
+                        if let Some(techoverlay) = techoverlay_image {
+                            imageops::overlay(&mut image, techoverlay, 0, 0);
                         }
-                        if let Some(moduleoverlay) = moduleoverlay {
-                            imageops::overlay(&mut image, &moduleoverlay, 48, 48);
+                        if let Some(moduleoverlay) = moduleoverlay_image {
+                            imageops::overlay(&mut image, moduleoverlay, 48, 48);
                         }
-                        if let Some(cloneoverlay) = cloneoverlay {
-                            imageops::overlay(&mut image, &cloneoverlay, 48, 0);
+                        if let Some(cloneoverlay) = cloneoverlay_image {
+                            imageops::overlay(&mut image, cloneoverlay, 48, 0);
                         }
                         image.save(&icon_dir.join(index_key))?;
                     }
+                    continue;
                 }
             }
         }
@@ -975,6 +1182,12 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
 
                 writer.start_file("service_metadata.json", FileOptions::<()>::default()).map_err(io::Error::other)?;
                 serde_json::to_writer_pretty(&mut writer, &service_metadata).map_err(io::Error::other)?;
+                if icon_config.external_overlays {
+                    writer.start_file("overlay_metadata.json", FileOptions::<()>::default()).map_err(io::Error::other)?;
+                    serde_json::to_writer(&mut writer, &overlay_metadata).map_err(io::Error::other)?;
+
+                    write_overlays(cache, &mut writer)?;
+                }
 
                 writer.finish().map_err(io::Error::other)?.flush()?;
             }
@@ -1017,6 +1230,12 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                         }
                     }
                 }
+                if icon_config.external_overlays {
+                    writer.start_file("overlay_metadata.json", FileOptions::<()>::default()).map_err(io::Error::other)?;
+                    serde_json::to_writer(&mut writer, &overlay_metadata).map_err(io::Error::other)?;
+
+                    write_overlays(cache, &mut writer)?;
+                }
                 writer.finish().map_err(io::Error::other)?.flush()?;
             }
             OutputMode::Web { out, copy_files, hard_link } => {
@@ -1044,6 +1263,12 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     HashMap::new()
                 };
 
+                if icon_config.external_overlays {
+                    serde_json::to_writer(&mut File::create(out.join("overlay_metadata.json"))?, &overlay_metadata).map_err(io::Error::other)?;
+
+                    // TODO: Write overlays?
+                }
+
                 let mut kind_buf = Vec::<IconKind>::new();
                 for (type_id, icons) in &service_metadata {
                     let json_name = format!("{}.json", type_id);
@@ -1057,7 +1282,11 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     created_files.insert(json_name, json_content);
 
                     for (icon_kind, filename) in icons {
-                        let link_name = format!("{}_{}.{}", type_id, icon_kind.name(), if IconKind::Render == *icon_kind { "jpg" } else { "png" });
+                        let link_name = format!("{}_{}.{}",
+                            type_id,
+                            icon_kind.name(),
+                            { icon_config.image_format.extension().unwrap_or(if IconKind::Render == *icon_kind { "jpg" } else { "png" }) }
+                        );
                         let link_source = std::path::absolute(icon_dir.join(filename))?;
                         let link_file = std::path::absolute(out.join(&link_name))?;
 
@@ -1257,5 +1486,25 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
         }
     }
 
+    Ok(())
+}
+
+fn write_overlays<C: SharedCache>(cache: &C, writer: &mut ZipWriter<File>) -> Result<(), IconError> {
+    let mut buf = Cursor::new(Vec::new());
+    for (prefix, list) in [("old", OLD_OVERLAY_LIST), ("new", NEW_OVERLAY_LIST)] {
+        for overlay in list {
+            writer.start_file(
+                format!("overlay/{}/{}.png", prefix, overlay.identifier().expect("overlay-list overlays should always have an identifier")),
+                FileOptions::<()>::default().compression_method(CompressionMethod::Stored)
+            ).map_err(io::Error::other)?;
+
+            if let Some((_, overlay_image)) = overlay.load(cache)? {
+                buf.set_position(0);
+                overlay_image.write_to(&mut buf, ImageFormat::Png)?;
+                buf.set_position(0);
+                io::copy(&mut buf.get_ref().as_slice(), writer)?;
+            }
+        }
+    }
     Ok(())
 }

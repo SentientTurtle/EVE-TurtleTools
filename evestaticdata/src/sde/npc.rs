@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::error::Error;
 use std::io::Write;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use crate::sde::load::{SDELoader, TypeDogma};
 use crate::types::ids;
@@ -11,6 +12,7 @@ use crate::types::ids;
 struct NPC {
     #[serde(rename="_key")]
     pub type_id: ids::TypeID,
+    #[serde(skip_serializing_if="NPCHealth::empty", default)]
     pub health: NPCHealth,
     #[serde(skip_serializing_if="NPCDamage::empty", default)]
     pub damage: NPCDamage,
@@ -23,7 +25,7 @@ struct NPC {
     #[serde(skip_serializing_if="NPCRemoteRepair::empty", default)]
     pub remote_repair: NPCRemoteRepair,
     #[serde(skip_serializing_if="Option::is_none", default)]
-    pub capacitor_boost: Option<NPCCapacitorBoost>,
+    pub capacitor_boost: Option<NPCRemoteCapacitorBoost>,
     #[serde(skip_serializing_if="Option::is_none", default)]
     pub mining: Option<NPCMining>,
     #[serde(skip_serializing_if="Option::is_none", default)]
@@ -61,6 +63,12 @@ struct NPCHealth {
     armor: NPCHPResists,
     #[serde(skip_serializing_if="NPCHPResists::empty", default)]
     hull: NPCHPResists,
+}
+
+impl NPCHealth {
+    fn empty(&self) -> bool {
+        self.shield.empty() && self.armor.empty() && self.hull.empty()
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -203,9 +211,9 @@ enum NPCSuperweapon {
         dmg_th: f64,
         dmg_ki: f64,
         dmg_ex: f64,
+        tracking: f64,
         optimal_range: f64,
         falloff: f64,
-        tracking: f64
     }
 }
 
@@ -287,16 +295,6 @@ struct NPCEwarTargetPaint {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct NPCEwarNeut {
-    pub amount: f64,
-    pub range: f64,
-    pub falloff: f64,
-    pub interval: f64,
-    pub discharge: Discharge,
-    pub is_nosferatu: bool
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 struct NPCEwarTrackingDisrupt {
     pub strength_tracking: f64,
     pub strength_optimal: f64,
@@ -317,6 +315,16 @@ struct NPCEwarGuidanceDisrupt {
     pub falloff: f64,
     pub duration: f64,
     pub discharge: Discharge
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct NPCEwarNeut {
+    pub amount: f64,
+    pub range: f64,
+    pub falloff: f64,
+    pub interval: f64,
+    pub discharge: Discharge,
+    pub is_nosferatu: bool
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -403,16 +411,6 @@ impl NPCRemoteRepair {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct NPCCapacitorBoost {
-    pub amount: f64,
-    pub interval: f64,
-    pub range: f64,
-    #[serde(skip_serializing_if="NPC::skip_zero", default)]
-    pub falloff: f64,
-    pub discharge: Discharge
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 struct NPCRemoteRegen {
     pub amount: f64,
     pub interval: f64,
@@ -421,6 +419,16 @@ struct NPCRemoteRegen {
     #[serde(skip_serializing_if="NPC::skip_zero", default)]
     pub falloff: f64,
     pub max_targets: f64,
+    pub discharge: Discharge
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct NPCRemoteCapacitorBoost {
+    pub amount: f64,
+    pub interval: f64,
+    pub range: f64,
+    #[serde(skip_serializing_if="NPC::skip_zero", default)]
+    pub falloff: f64,
     pub discharge: Discharge
 }
 
@@ -635,9 +643,15 @@ const KNOWN_ATTRIBUTES: &[ids::AttributeID] = &[
 pub fn build_npc_data<W: Write>(loader: &mut SDELoader, out: &mut W) -> Result<(Vec<ids::AttributeID>, Vec<ids::EffectID>), Box<dyn Error>> {
     let attribute_info = loader.load_dogma_attributes_map()?;
     let effect_info = loader.load_dogma_effects_map()?;
-    let npc_groups = loader.load_groups()?
-        .filter_map(|r| match r { Ok(g) => if g.categoryID == 11 { Some(Ok(g.groupID)) } else { None } Err(err) => Some(Err(err)) })
-        .collect::<Result<Vec<ids::GroupID>, _>>()?;
+    let mut npc_groups = Vec::new();
+    let mut group_names = IndexMap::new();
+    for group in loader.load_groups()? {
+        let group = group?;
+        if group.categoryID == 11 {
+            npc_groups.push(group.groupID);
+        }
+        group_names.insert(group.groupID, group.name.en);
+    }
     let type_dogma = loader.load_type_dogma_map()?;
 
     let mut attributes: HashSet<ids::AttributeID> = HashSet::new();
@@ -876,6 +890,7 @@ pub fn build_npc_data<W: Write>(loader: &mut SDELoader, out: &mut W) -> Result<(
         }
         if let Some(overview_icon_group) = npc_dogma.dogmaAttributes.get(&1766) {
             npc.stats.overview_icon_group = Some(*overview_icon_group);
+            // println!("{} {} - {} {}", inv_type.typeID, inv_type.name.en, overview_icon_group, group_names.get(&(*overview_icon_group as ids::GroupID)).unwrap());
         }
         if let Some(is_capital) = npc_dogma.dogmaAttributes.get(&1785) {
             // 0: false, 1: true
@@ -1204,7 +1219,7 @@ pub fn build_npc_data<W: Write>(loader: &mut SDELoader, out: &mut W) -> Result<(
                 // NPC Remote Capacitor Boost
                 12073 => {
                     assert!(npc.capacitor_boost.is_none());
-                    npc.capacitor_boost = Some(NPCCapacitorBoost {
+                    npc.capacitor_boost = Some(NPCRemoteCapacitorBoost {
                         amount: attribute_value(npc_dogma, 90)?,
                         interval: attribute_value(npc_dogma, 5657)? / 1000.0,
                         range: attribute_value(npc_dogma, 5658)?,
