@@ -96,9 +96,9 @@ jobs:
       - name: Generate Icons (Bonus)
         working-directory: ./eveicongenerator
         run: cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" --no_purge --module_overlays --clone_overlays  multi --iec "./Image Export Collection - Bonus Style.zip" --service_bundle "./Service Bundle - Bonus Style.zip"
-      - name: Generate Icons (Bonus)
+      - name: Generate Icons (Clean)
         working-directory: ./eveicongenerator
-        run: cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" --no_purge --external_overlays service_bundle --out "./Service Bundle - Clean.zip"
+        run: cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" --no_purge --external_overlays  multi --iec "./Image Export Collection - Clean.zip" --service_bundle "./Service Bundle - Clean.zip"
       - name: Publish
         uses: softprops/action-gh-release@v3
         with:
@@ -115,4 +115,5 @@ jobs:
             Service Bundle - Old Style.zip
             Image Export Collection - Bonus Style.zip
             Service Bundle - Bonus Style.zip
+            Image Export Collection - Clean.zip
             Service Bundle - Clean.zip
