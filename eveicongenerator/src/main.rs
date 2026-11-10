@@ -3,19 +3,21 @@ pub const CRATE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const GIT_HASH: Option<&'static str> = option_env!("GIT_HASH");
 pub const CRATE_REPO: &'static str = env!("CARGO_PKG_REPOSITORY");
 
-use crate::icons::{parse_utility_list, IconBuildData, IconConfig, IconError, IconImageFormat, OutputMode};
-use evesharedcache::cache::CacheDownloader;
-use std::time::Instant;
-use fs_err as fs;
-use std::path::PathBuf;
-use std::sync::OnceLock;
-use clap::{Arg, ArgAction, Command};
+use crate::icons::{IconBuildData, IconConfig, IconError, IconImageFormat, OutputMode, parse_utility_list};
+use crate::patch::build_patch;
 use clap::builder::ValueParser;
-use std::io::Write;
-use std::process::ExitCode;
+use clap::{Arg, ArgAction, Command};
+use evesharedcache::cache::CacheDownloader;
 use evestaticdata::sde::load::SDELoader;
+use fs_err as fs;
+use std::io::Write;
+use std::path::PathBuf;
+use std::process::ExitCode;
+use std::sync::OnceLock;
+use std::time::Instant;
 
 pub mod icons;
+pub mod patch;
 
 static LOG_FILE: OnceLock<fs::File> = OnceLock::new();
 
@@ -302,7 +304,32 @@ fn do_main() -> Result<(), IconError> {
                         .requires("aux_all")
                         .action(ArgAction::SetTrue),
                 ])
-                .arg_required_else_help(true)
+                .arg_required_else_help(true),
+            Command::new("build_patch")
+                .about("Generate patch file")
+                .args([
+                    Arg::new("from")
+                        .short('f')
+                        .long("from")
+                        .required(true)
+                        .help("Input 'From' file")
+                        .value_name("FILE")
+                        .value_parser(ValueParser::path_buf()),
+                    Arg::new("to")
+                        .short('t')
+                        .long("to")
+                        .required(true)
+                        .help("Input 'To' file")
+                        .value_name("FILE")
+                        .value_parser(ValueParser::path_buf()),
+                    Arg::new("out")
+                        .short('o')
+                        .long("out")
+                        .required(true)
+                        .help("Output file")
+                        .value_name("FILE")
+                        .value_parser(ValueParser::path_buf()),
+                ]),
         ])
         .get_matches();
 
@@ -385,6 +412,14 @@ fn do_main() -> Result<(), IconError> {
 
             assert!(output_modes.len() > 0, "At least one output mode when using `multi` command is required"); // This should be enforced by clap, so a simple panic is sufficient.
             output_modes
+        }
+        "build_patch" => {
+            let from = command_args.get_one::<PathBuf>("from").expect("from is required");
+            let to = command_args.get_one::<PathBuf>("to").expect("to is required");
+            let out = command_args.get_one::<PathBuf>("out").expect("out is required");
+
+            // Build patch and exit-early
+            return build_patch(from, to, out).map_err(|err| IconError::String(err.to_string()));
         }
         _ => panic!("Unknown subcommand: {}", command_name)
     };
