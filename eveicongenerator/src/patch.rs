@@ -26,24 +26,22 @@ pub fn build_patch(from: &PathBuf, to: &PathBuf, out: &PathBuf) -> Result<(), Bo
     let mut to = ZipArchive::new(File::open(to)?)?;
     let mut out = ZipWriter::new(File::create(out)?);
 
-    let mut seen_files = HashSet::new();
+    let mut new_files = HashSet::new();
     for idx in 0..to.len() {
         let mut new_file = to.by_index(idx).expect("we iterate over len, so index access must be valid");
+        new_files.insert(Box::<[u8]>::from(new_file.name_raw()));
 
-        seen_files.insert(Box::<[u8]>::from(new_file.name_raw()));
-
-        let file_added = new_file.name()?.ends_with(".json") ||
-            match from.by_name_raw(new_file.name_raw()) {
-                Ok(old_file) => {
-                    let data_eq = data_equals(new_file, old_file)?;
-                    // Reinstate new_file as it has just been consumed by data_equals reading the data, and we may need it later
-                    new_file = to.by_index(idx).expect("we iterate over len, so index access must be valid");
-                    // If data is NOT equal, file was updated and should be added to patch file
-                    !data_eq
-                },
-                Err(ZipError::FileNotFound) => true,
-                Err(err) => return Err(err)?,
-            };
+        let file_added = match from.by_name_raw(new_file.name_raw()) {
+            Ok(old_file) => {
+                let data_eq = data_equals(new_file, old_file)?;
+                // Reinstate new_file as it has just been consumed by data_equals reading the data, and we may need it later
+                new_file = to.by_index(idx).expect("we iterate over len, so index access must be valid");
+                // If data is NOT equal, file was updated and should be added to patch file
+                !data_eq
+            },
+            Err(ZipError::FileNotFound) => true,
+            Err(err) => return Err(err)?,
+        };
 
         if file_added {
             out.raw_copy_file(new_file)?;
@@ -54,7 +52,7 @@ pub fn build_patch(from: &PathBuf, to: &PathBuf, out: &PathBuf) -> Result<(), Bo
     out.start_file("DELETED.txt", FileOptions::<()>::default())?;
     for idx in 0..from.len() {
         let old_file = to.by_index(idx).expect("we iterate over len, so index access must be valid");
-        if !seen_files.contains(old_file.name_raw()) {
+        if !new_files.contains(old_file.name_raw()) {
             writeln!(out, "{}", old_file.name()?)?;
         }
     }
