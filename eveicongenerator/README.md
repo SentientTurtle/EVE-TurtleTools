@@ -99,6 +99,7 @@ Subject to change: Additional icons may be added. (For requests: Open an issue o
 
 ## Versions after `3670638`:
 * Added `Service Bundle - Clean`; Contains icons without overlays and overlay metadata file, such that overlays may be applied by users at application runtime.
+* Added 'Service Bundle-PATCH-{PREV_VERSION}' & 'Image Export Collection-PATCH-{PREV_VERSION}' files
 
 ## Versions after `3561556`:
 * Added 'Utility Icons'
