@@ -26,7 +26,7 @@ jobs:
           else
             BUILD_NUMBER=$(curl -s https://developers.eveonline.com/static-data/tranquility/latest.jsonl | jq -r '.buildNumber')
           fi
-  
+          
           echo "Build number: ${BUILD_NUMBER}"
           echo "build-number=${BUILD_NUMBER}" >> $GITHUB_OUTPUT
 
@@ -35,17 +35,17 @@ jobs:
         run: |
           TAG_NAME="icons-${{ steps.get-build-number.outputs.build-number }}"
           REF_NAME=$(curl -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -s https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG_NAME} | jq -r '.ref')
-  
+          
           echo "Tag name: ${TAG_NAME}"
           echo "Ref name: ${REF_NAME}"
-  
+          
           if [ -n "${REF_NAME}" ] && [ "${REF_NAME}" != "null" ]; then
             echo "Tag ${TAG_NAME} already exists"
-  
+          
             echo "new-tag=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-  
+          
           echo "new-tag=true" >> $GITHUB_OUTPUT
 
   build-icons:
@@ -104,13 +104,13 @@ jobs:
         uses: robinraju/release-downloader@v1
         with:
           latest: true
-          fileName: "@(Image Export Collection|Service Bundle).zip"
+          fileName: "@(Image.Export.Collection|Service.Bundle).zip"
           out-file-path: './eveicongenerator/old'
       - name: Build patch files
         working-directory: ./eveicongenerator
         run: |
-          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Image Export Collection.zip" --to "./Image Export Collection.zip" --out "Image Export Collection-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
-          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Service Bundle.zip" --to "./Service Bundle.zip" --out "Service Bundle-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
+          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Image.Export.Collection.zip" --to "./Image Export Collection.zip" --out "Image Export Collection-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
+          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Service.Bundle.zip" --to "./Service Bundle.zip" --out "Service Bundle-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
       - name: Publish
         uses: softprops/action-gh-release@v3
         with:
