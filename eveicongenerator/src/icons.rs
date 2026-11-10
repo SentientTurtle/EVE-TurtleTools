@@ -204,6 +204,8 @@ static NEW_OVERLAY_TIMELIMITED: IconOverlay = IconOverlay::Resource { resource: 
 static NEW_OVERLAY_STRUCTURE_FACTION: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlayfaction.png", identifier: "meta-structure-faction" };
 static NEW_OVERLAY_STRUCTURE_T2: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlayt2.png", identifier: "meta-structure-t2" };
 static NEW_OVERLAY_STRUCTURE_T1: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlay.png", identifier: "meta-structure-t1" };
+static NEW_OVERLAY_ACADEMY: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/academy_ship_16px.png", identifier: "meta-academy" };
+static NEW_OVERLAY_ABERRANT: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/aberrant.png", identifier: "meta-aberrant" };
 static NEW_OVERLAY_MODULE_HIGH: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_123.png", identifier: "module-high" };
 static NEW_OVERLAY_MODULE_MEDIUM: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_122.png", identifier: "module-medium" };
 static NEW_OVERLAY_MODULE_LOW: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_121.png", identifier: "module-low" };
@@ -225,6 +227,8 @@ static OLD_OVERLAY_TIMELIMITED: IconOverlay = IconOverlay::Bytes { image: includ
 static OLD_OVERLAY_STRUCTURE_FACTION: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Faction.png"), cachekey: "structurefaction-old", identifier: "meta-structure-faction" };
 static OLD_OVERLAY_STRUCTURE_T2: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Tech 2.png"), cachekey: "structuret2-old", identifier: "meta-structure-t2" };
 static OLD_OVERLAY_STRUCTURE_T1: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Tech 1.png"), cachekey: "structuret1-old", identifier: "meta-structure-t1" };
+static OLD_OVERLAY_ACADEMY: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Academy.png"), cachekey: "academy-old", identifier: "meta-academy" };
+static OLD_OVERLAY_ABERRANT: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Aberrant.png"), cachekey: "aberrant-old", identifier: "meta-aberrant" };
 const OLD_OVERLAY_MODULE_HIGH: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-High.png"), cachekey: "slot-high-old", identifier: "module-high" };
 const OLD_OVERLAY_MODULE_MEDIUM: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Med.png"), cachekey: "slot-med-old", identifier: "module-medium" };
 const OLD_OVERLAY_MODULE_LOW: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Low.png"), cachekey: "slot-low-old", identifier: "module-low" };
@@ -247,6 +251,8 @@ static NEW_OVERLAY_LIST: &[&IconOverlay] = &[
     &NEW_OVERLAY_STRUCTURE_FACTION,
     &NEW_OVERLAY_STRUCTURE_T2,
     &NEW_OVERLAY_STRUCTURE_T1,
+    &NEW_OVERLAY_ACADEMY,
+    &NEW_OVERLAY_ABERRANT,
     &NEW_OVERLAY_MODULE_HIGH,
     &NEW_OVERLAY_MODULE_MEDIUM,
     &NEW_OVERLAY_MODULE_LOW,
@@ -269,6 +275,8 @@ static OLD_OVERLAY_LIST: &[&IconOverlay] = &[
     &OLD_OVERLAY_STRUCTURE_FACTION,
     &OLD_OVERLAY_STRUCTURE_T2,
     &OLD_OVERLAY_STRUCTURE_T1,
+    &OLD_OVERLAY_ACADEMY,
+    &OLD_OVERLAY_ABERRANT,
     &OLD_OVERLAY_MODULE_HIGH,
     &OLD_OVERLAY_MODULE_MEDIUM,
     &OLD_OVERLAY_MODULE_LOW,
@@ -365,6 +373,8 @@ pub fn get_techoverlay(metagroup_id: u32, use_old_style: bool) -> IconOverlay {
             52 => OLD_OVERLAY_STRUCTURE_FACTION,
             53 => OLD_OVERLAY_STRUCTURE_T2,
             54 => OLD_OVERLAY_STRUCTURE_T1,
+            62 => OLD_OVERLAY_ACADEMY,
+            63 => OLD_OVERLAY_ABERRANT,
             _ => IconOverlay::None
         }
     } else {
@@ -382,6 +392,8 @@ pub fn get_techoverlay(metagroup_id: u32, use_old_style: bool) -> IconOverlay {
             52 => NEW_OVERLAY_STRUCTURE_FACTION,
             53 => NEW_OVERLAY_STRUCTURE_T2,
             54 => NEW_OVERLAY_STRUCTURE_T1,
+            62 => NEW_OVERLAY_ACADEMY,
+            63 => NEW_OVERLAY_ABERRANT,
             _ => IconOverlay::None
         }
     }
