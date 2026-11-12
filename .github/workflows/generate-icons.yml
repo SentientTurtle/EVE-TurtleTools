@@ -104,13 +104,22 @@ jobs:
         uses: robinraju/release-downloader@v1
         with:
           latest: true
-          fileName: "@(Image.Export.Collection|Service.Bundle).zip"
+          fileName: "@(Image.Export.Collection|Service.Bundle)@(*[!1234567890].zip|.zip)"
           out-file-path: './eveicongenerator/old'
       - name: Build patch files
         working-directory: ./eveicongenerator
         run: |
           cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Image.Export.Collection.zip" --to "./Image Export Collection.zip" --out "Image Export Collection-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
           cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Service.Bundle.zip" --to "./Service Bundle.zip" --out "Service Bundle-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
+          
+          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Image.Export.Collection.-.Bonus.Style.zip" --to "./Image Export Collection - Bonus Style.zip" --out "Image Export Collection - Bonus Style-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
+          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Service.Bundle.-.Bonus.Style.zip" --to "./Service Bundle - Bonus Style.zip" --out "Service Bundle - Bonus Style-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
+          
+          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Image.Export.Collection.-.Clean.zip" --to "./Image Export Collection - Clean.zip" --out "Image Export Collection - Clean-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
+          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Service.Bundle.-.Clean.zip" --to "./Service Bundle - Clean.zip" --out "Service Bundle - Clean-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
+
+          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Image.Export.Collection.-.Old.Style.zip" --to "./Image Export Collection - Old Style.zip" --out "Image Export Collection - Old Style-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
+          cargo run --release --package eveicongenerator --bin eveicongenerator -- -l ./log.txt --user_agent "Github Actions on behalf of ${{ github.repository }}" build_patch --from "./old/Service.Bundle.-.Old.Style.zip" --to "./Service Bundle - Old Style.zip" --out "Service Bundle - Old Style-PATCH-${{steps.download-prev.outputs.tag_name}}.zip"
       - name: Publish
         uses: softprops/action-gh-release@v3
         with:
@@ -131,3 +140,9 @@ jobs:
             Service Bundle - Clean.zip
             Image Export Collection-PATCH-${{steps.download-prev.outputs.tag_name}}.zip
             Service Bundle-PATCH-${{steps.download-prev.outputs.tag_name}}.zip
+            Image Export Collection - Bonus Style-PATCH-${{steps.download-prev.outputs.tag_name}}.zip
+            Service Bundle - Bonus Style-PATCH-${{steps.download-prev.outputs.tag_name}}.zip
+            Image Export Collection - Clean-PATCH-${{steps.download-prev.outputs.tag_name}}.zip
+            Service Bundle - Clean-PATCH-${{steps.download-prev.outputs.tag_name}}.zip
+            Image Export Collection - Old Style-PATCH-${{steps.download-prev.outputs.tag_name}}.zip
+            Service Bundle - Old Style-PATCH-${{steps.download-prev.outputs.tag_name}}.zip
