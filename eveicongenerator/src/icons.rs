@@ -5,7 +5,7 @@ use image::imageops::FilterType;
 use image::{imageops, DynamicImage, GrayAlphaImage, ImageFormat, ImageReader, LumaA};
 use image_blend::BufferBlend;
 use serde::Serialize;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{BufRead, BufReader, ErrorKind};
@@ -797,7 +797,7 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
     }
 
     let mut service_metadata = BTreeMap::<u32, BTreeMap<IconKind, String>>::new();
-    let mut overlay_metadata = BTreeMap::<u32, HashSet<&'static str>>::new();
+    let mut overlay_metadata = BTreeMap::<u32, BTreeSet<&'static str>>::new();
     let mut new_index = HashSet::<String>::new();
 
     fn is_up_to_date(old_index: &HashSet<String>, new_index: &mut HashSet<String>, index_key: &str, force_rebuild: bool) -> bool {
