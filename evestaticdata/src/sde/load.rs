@@ -472,12 +472,9 @@ impl_map_collect!(ids::BloodlineID, Bloodline, bloodlineID);
 #[cfg_attr(feature="sde_strict", serde(deny_unknown_fields))]
 #[cfg_attr(feature="docs_export", doc_sde(sde_file="blueprints"))]
 pub struct Blueprint {
-    /// Key; Blueprint TypeID. Duplicate of explicit `blueprintTypeID` field in entry. This library current favours using the explicit field, this may change.
-    /// In the event this is de-duplicated by removing the entry field this field will be renamed to [`Blueprint::blueprintTypeID`] to retain backwards compatibility.
+    /// Blueprint TypeID.
     #[serde(rename="_key")]
     #[allow(unused)]
-    blueprintTypeID_key: ids::TypeID,
-    /// TypeID of this blueprint. BP Originals and BP Copies share the same TypeID.
     pub blueprintTypeID: ids::TypeID,
     /// The maximum amount of job runs that a single blueprint copy can have
     ///
@@ -2881,22 +2878,20 @@ impl<'de> Deserialize<'de> for MasteryInfo {
 pub struct MercenaryTacticalOperation {
     /// ID for this operation
     #[serde(rename="_key")]
-    pub operation_id: ids::DungeonID,
+    pub dungeon_id: ids::DungeonID,
     /// Anarchy score modifier if this event is successfully completed
     pub anarchyImpact: i32,
     /// Development score modifier if this event is successfully completed
     pub developmentImpact: i32,
     /// Infomorph production modifier if this event is successfully completed
     pub infomorphBonus: i32,
-    /// [`Dungeon`] to which this event applies
-    pub dungeonID: ids::DungeonID,
     /// Operation name
     pub name: LocalizedString,
     /// Operation description
     pub description: LocalizedString
 }
 
-impl_map_collect!(ids::DungeonID, MercenaryTacticalOperation, operation_id);
+impl_map_collect!(ids::DungeonID, MercenaryTacticalOperation, dungeon_id);
 
 /// Metagroup or "tech tier" for [`Type`]s
 #[derive(Debug, Deserialize)]
@@ -4189,10 +4184,6 @@ pub struct SkinLicense {
     /// Equal to `licenseTypeID`
     #[serde(rename="_key")]
     pub typeID: ids::TypeID,
-    /// TypeID of the license item
-    ///
-    /// Equal to `typeID`
-    pub licenseTypeID: ids::TypeID,
     /// Skin duration, -1 for permanent skins
     pub duration: i32,
     /// [`Skin`] this license is for
