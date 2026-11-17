@@ -111,19 +111,19 @@ Metadata is contained in the `service_metadata.json` file, with the following st
   },
   ...
   "11292": {
-      // Blueprint/Relic/Reaction types have both an 'icon' field and a 'bp' field, both pointing at the blueprint "original" icon
-      "icon": "E90D987E20CB4BC00172FA6A1A2DF8AD.png",
-      "bp": "E90D987E20CB4BC00172FA6A1A2DF8AD.png",
-      // Blueprints have a 'bpc' field for blueprint copies, pointing at the blueprint "copy" icon
-      "bpc": "41F5172C5523DA82BE25E500ABA01996.png"
-    },
-    ...
-    "11294": {
-      // Different entries point to the same file if they share an icon
-      "icon": "E90D987E20CB4BC00172FA6A1A2DF8AD.png",
-      "bp": "E90D987E20CB4BC00172FA6A1A2DF8AD.png",
-      "bpc": "41F5172C5523DA82BE25E500ABA01996.png"
-    },
+    // Blueprint/Relic/Reaction types have both an 'icon' field and a 'bp' field, both pointing at the blueprint "original" icon
+    "icon": "E90D987E20CB4BC00172FA6A1A2DF8AD.png",
+    "bp": "E90D987E20CB4BC00172FA6A1A2DF8AD.png",
+    // Blueprints have a 'bpc' field for blueprint copies, pointing at the blueprint "copy" icon
+    "bpc": "41F5172C5523DA82BE25E500ABA01996.png"
+  },
+  ...
+  "11294": {
+    // Different entries point to the same file if they share an icon
+    "icon": "E90D987E20CB4BC00172FA6A1A2DF8AD.png",
+    "bp": "E90D987E20CB4BC00172FA6A1A2DF8AD.png",
+    "bpc": "41F5172C5523DA82BE25E500ABA01996.png"
+  },
 }
 ```
 
