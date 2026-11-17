@@ -188,54 +188,54 @@ pub struct GraphicInfo {
     pub hull: Option<String>
 }
 
-static OVERLAY_CACHE: LazyLock<Mutex<HashMap<&'static str, &'static DynamicImage>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static OVERLAY_CACHE: LazyLock<Mutex<HashMap<(bool, &'static str), &'static DynamicImage>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 // Overlays are declared static so their metadata exists only once in the binary. ("::Bytes" overlays include the image data and mustn't be duplicated)
-static NEW_OVERLAY_T1: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_241.png", identifier: "meta-t1" };
-static NEW_OVERLAY_T2: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_242.png", identifier: "meta-t2" };
-static NEW_OVERLAY_STORYLINE: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_245.png", identifier: "meta-storyline" };
-static NEW_OVERLAY_FACTION: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_246.png", identifier: "meta-faction" };
-static NEW_OVERLAY_OFFICER: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_248.png", identifier: "meta-officer" };
-static NEW_OVERLAY_DEADSPACE: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_247.png", identifier: "meta-deadspace" };
-static NEW_OVERLAY_T3: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_243.png", identifier: "meta-t3" };
-static NEW_OVERLAY_ABYSSAL: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/abyssal.png", identifier: "meta-abyssal" };
-static NEW_OVERLAY_NES: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/nes.png", identifier: "meta-nes" };
-static NEW_OVERLAY_TIMELIMITED: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/timelimited.png", identifier: "meta-timelimited" };
-static NEW_OVERLAY_STRUCTURE_FACTION: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlayfaction.png", identifier: "meta-structure-faction" };
-static NEW_OVERLAY_STRUCTURE_T2: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlayt2.png", identifier: "meta-structure-t2" };
-static NEW_OVERLAY_STRUCTURE_T1: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlay.png", identifier: "meta-structure-t1" };
-static NEW_OVERLAY_ACADEMY: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/academy_ship_16px.png", identifier: "meta-academy" };
-static NEW_OVERLAY_ABERRANT: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/aberrant.png", identifier: "meta-aberrant" };
-static NEW_OVERLAY_MODULE_HIGH: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_123.png", identifier: "module-high" };
-static NEW_OVERLAY_MODULE_MEDIUM: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_122.png", identifier: "module-medium" };
-static NEW_OVERLAY_MODULE_LOW: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_121.png", identifier: "module-low" };
-static NEW_OVERLAY_MODULE_RIG: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_124.png", identifier: "module-rig" };
-static NEW_OVERLAY_MODULE_SUBSYSTEM: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_42.png", identifier: "module-subsystem" };
-static NEW_OVERLAY_CLONE_ALPHA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/new/Alpha.png"), cachekey: "alpha-new", identifier: "clone-alpha" };
-static NEW_OVERLAY_CLONE_OMEGA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/new/Omega.png"), cachekey: "omega-new", identifier: "clone-omega" };
+static NEW_OVERLAY_T1: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_241.png", identifier: "meta-t1", is_old_style: false };
+static NEW_OVERLAY_T2: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_242.png", identifier: "meta-t2", is_old_style: false };
+static NEW_OVERLAY_STORYLINE: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_245.png", identifier: "meta-storyline", is_old_style: false };
+static NEW_OVERLAY_FACTION: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_246.png", identifier: "meta-faction", is_old_style: false };
+static NEW_OVERLAY_OFFICER: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_248.png", identifier: "meta-officer", is_old_style: false };
+static NEW_OVERLAY_DEADSPACE: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_247.png", identifier: "meta-deadspace", is_old_style: false };
+static NEW_OVERLAY_T3: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/73_16_243.png", identifier: "meta-t3", is_old_style: false };
+static NEW_OVERLAY_ABYSSAL: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/abyssal.png", identifier: "meta-abyssal", is_old_style: false };
+static NEW_OVERLAY_NES: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/nes.png", identifier: "meta-nes", is_old_style: false };
+static NEW_OVERLAY_TIMELIMITED: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/timelimited.png", identifier: "meta-timelimited", is_old_style: false };
+static NEW_OVERLAY_STRUCTURE_FACTION: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlayfaction.png", identifier: "meta-structure-faction", is_old_style: false };
+static NEW_OVERLAY_STRUCTURE_T2: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlayt2.png", identifier: "meta-structure-t2", is_old_style: false };
+static NEW_OVERLAY_STRUCTURE_T1: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/shared/structureoverlay.png", identifier: "meta-structure-t1", is_old_style: false };
+static NEW_OVERLAY_ACADEMY: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/academy_ship_16px.png", identifier: "meta-academy", is_old_style: false };
+static NEW_OVERLAY_ABERRANT: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/itemoverlay/aberrant.png", identifier: "meta-aberrant", is_old_style: false };
+static NEW_OVERLAY_MODULE_HIGH: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_123.png", identifier: "module-high", is_old_style: false };
+static NEW_OVERLAY_MODULE_MEDIUM: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_122.png", identifier: "module-medium", is_old_style: false };
+static NEW_OVERLAY_MODULE_LOW: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_121.png", identifier: "module-low", is_old_style: false };
+static NEW_OVERLAY_MODULE_RIG: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_124.png", identifier: "module-rig", is_old_style: false };
+static NEW_OVERLAY_MODULE_SUBSYSTEM: IconOverlay = IconOverlay::Resource { resource: "res:/ui/texture/icons/38_16_42.png", identifier: "module-subsystem", is_old_style: false };
+static NEW_OVERLAY_CLONE_ALPHA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/new/Alpha.png"), cachekey: "alpha-new", identifier: "clone-alpha", is_old_style: false };
+static NEW_OVERLAY_CLONE_OMEGA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/new/Omega.png"), cachekey: "omega-new", identifier: "clone-omega", is_old_style: false };
 
-static OLD_OVERLAY_T1: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Tech 1.png"), cachekey: "t1-old", identifier: "meta-t1" };
-static OLD_OVERLAY_T2: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Tech 2.png"), cachekey: "t2-old", identifier: "meta-t2" };
-static OLD_OVERLAY_STORYLINE: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Storyline.png"), cachekey: "storyline-old", identifier: "meta-storyline" };
-static OLD_OVERLAY_FACTION: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Faction.png"), cachekey: "faction-old", identifier: "meta-faction" };
-static OLD_OVERLAY_OFFICER: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Officer.png"), cachekey: "officer-old", identifier: "meta-officer" };
-static OLD_OVERLAY_DEADSPACE: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Deadspace.png"), cachekey: "deadspace-old", identifier: "meta-deadspace" };
-static OLD_OVERLAY_T3: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Tech 3.png"), cachekey: "t3-old", identifier: "meta-t3" };
-static OLD_OVERLAY_ABYSSAL: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Abyssal.png"), cachekey: "abyssal-old", identifier: "meta-abyssal" };
-static OLD_OVERLAY_NES: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/NES.png"), cachekey: "nes-old", identifier: "meta-nes" };
-static OLD_OVERLAY_TIMELIMITED: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Time Limited.png"), cachekey: "timelimited-old", identifier: "meta-timelimited" };
-static OLD_OVERLAY_STRUCTURE_FACTION: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Faction.png"), cachekey: "structurefaction-old", identifier: "meta-structure-faction" };
-static OLD_OVERLAY_STRUCTURE_T2: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Tech 2.png"), cachekey: "structuret2-old", identifier: "meta-structure-t2" };
-static OLD_OVERLAY_STRUCTURE_T1: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Tech 1.png"), cachekey: "structuret1-old", identifier: "meta-structure-t1" };
-static OLD_OVERLAY_ACADEMY: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Academy.png"), cachekey: "academy-old", identifier: "meta-academy" };
-static OLD_OVERLAY_ABERRANT: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Aberrant.png"), cachekey: "aberrant-old", identifier: "meta-aberrant" };
-const OLD_OVERLAY_MODULE_HIGH: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-High.png"), cachekey: "slot-high-old", identifier: "module-high" };
-const OLD_OVERLAY_MODULE_MEDIUM: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Med.png"), cachekey: "slot-med-old", identifier: "module-medium" };
-const OLD_OVERLAY_MODULE_LOW: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Low.png"), cachekey: "slot-low-old", identifier: "module-low" };
-const OLD_OVERLAY_MODULE_RIG: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Rig.png"), cachekey: "slot-rig-old", identifier: "module-rig" };
-const OLD_OVERLAY_MODULE_SUBSYSTEM: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Subsystem.png"), cachekey: "slot-subsystem-old", identifier: "module-subsystem" };
-const OLD_OVERLAY_CLONE_OMEGA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Omega.png"), cachekey: "omega-old", identifier: "clone-omega" };
-const OLD_OVERLAY_CLONE_ALPHA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Alpha.png"), cachekey: "alpha-old", identifier: "clone-alpha" };
+static OLD_OVERLAY_T1: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Tech 1.png"), cachekey: "t1-old", identifier: "meta-t1", is_old_style: true };
+static OLD_OVERLAY_T2: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Tech 2.png"), cachekey: "t2-old", identifier: "meta-t2", is_old_style: true };
+static OLD_OVERLAY_STORYLINE: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Storyline.png"), cachekey: "storyline-old", identifier: "meta-storyline", is_old_style: true };
+static OLD_OVERLAY_FACTION: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Faction.png"), cachekey: "faction-old", identifier: "meta-faction", is_old_style: true };
+static OLD_OVERLAY_OFFICER: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Officer.png"), cachekey: "officer-old", identifier: "meta-officer", is_old_style: true };
+static OLD_OVERLAY_DEADSPACE: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Deadspace.png"), cachekey: "deadspace-old", identifier: "meta-deadspace", is_old_style: true };
+static OLD_OVERLAY_T3: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Tech 3.png"), cachekey: "t3-old", identifier: "meta-t3", is_old_style: true };
+static OLD_OVERLAY_ABYSSAL: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Abyssal.png"), cachekey: "abyssal-old", identifier: "meta-abyssal", is_old_style: true };
+static OLD_OVERLAY_NES: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/NES.png"), cachekey: "nes-old", identifier: "meta-nes", is_old_style: true };
+static OLD_OVERLAY_TIMELIMITED: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Time Limited.png"), cachekey: "timelimited-old", identifier: "meta-timelimited", is_old_style: true };
+static OLD_OVERLAY_STRUCTURE_FACTION: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Faction.png"), cachekey: "structurefaction-old", identifier: "meta-structure-faction", is_old_style: true };
+static OLD_OVERLAY_STRUCTURE_T2: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Tech 2.png"), cachekey: "structuret2-old", identifier: "meta-structure-t2", is_old_style: true };
+static OLD_OVERLAY_STRUCTURE_T1: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Structure Tech 1.png"), cachekey: "structuret1-old", identifier: "meta-structure-t1", is_old_style: true };
+static OLD_OVERLAY_ACADEMY: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Academy.png"), cachekey: "academy-old", identifier: "meta-academy", is_old_style: true };
+static OLD_OVERLAY_ABERRANT: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Aberrant.png"), cachekey: "aberrant-old", identifier: "meta-aberrant", is_old_style: true };
+const OLD_OVERLAY_MODULE_HIGH: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-High.png"), cachekey: "slot-high-old", identifier: "module-high", is_old_style: true };
+const OLD_OVERLAY_MODULE_MEDIUM: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Med.png"), cachekey: "slot-med-old", identifier: "module-medium", is_old_style: true };
+const OLD_OVERLAY_MODULE_LOW: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Low.png"), cachekey: "slot-low-old", identifier: "module-low", is_old_style: true };
+const OLD_OVERLAY_MODULE_RIG: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Rig.png"), cachekey: "slot-rig-old", identifier: "module-rig", is_old_style: true };
+const OLD_OVERLAY_MODULE_SUBSYSTEM: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Slot-Subsystem.png"), cachekey: "slot-subsystem-old", identifier: "module-subsystem", is_old_style: true };
+const OLD_OVERLAY_CLONE_OMEGA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Omega.png"), cachekey: "omega-old", identifier: "clone-omega", is_old_style: true };
+const OLD_OVERLAY_CLONE_ALPHA: IconOverlay = IconOverlay::Bytes { image: include_bytes!("rsc/overlay/old/Alpha.png"), cachekey: "alpha-old", identifier: "clone-alpha", is_old_style: true };
 
 static NEW_OVERLAY_LIST: &[&IconOverlay] = &[
     &NEW_OVERLAY_T1,
@@ -290,18 +290,20 @@ const BPO_PATCH: IconOverlay = IconOverlay::Bytes {
     image: include_bytes!("rsc/patch/BPO.png"),
     cachekey: "patch-BPO",
     identifier: "patch-BPO",
+    is_old_style: false,
 };
 const BPC_PATCH: IconOverlay = IconOverlay::Bytes {
     image: include_bytes!("rsc/patch/BPC.png"),
     cachekey: "patch-BPC",
     identifier: "patch-BPC",
+    is_old_style: false,
 };
 
 #[derive(Copy, Clone)]
 pub enum IconOverlay {  // TODO: Cache parsed images
     None,
-    Resource { resource: &'static str, identifier: &'static str },
-    Bytes { image: &'static [u8], cachekey: &'static str, identifier: &'static str }
+    Resource { resource: &'static str, identifier: &'static str, is_old_style: bool },
+    Bytes { image: &'static [u8], cachekey: &'static str, identifier: &'static str, is_old_style: bool }
 }
 
 impl IconOverlay {
@@ -316,23 +318,23 @@ impl IconOverlay {
     pub fn load<C: SharedCache>(self, cache: &C) -> Result<Option<(&str, &'static DynamicImage)>, IconError> {
         match self {
             IconOverlay::None => Ok(None),
-            IconOverlay::Resource { resource, identifier } => {
+            IconOverlay::Resource { resource, identifier, is_old_style } => {
                 let mut overlay_cache = OVERLAY_CACHE.lock().expect("Unexpected panic in overlay loading");
-                if let Some(overlay) = overlay_cache.get(identifier) {
+                if let Some(overlay) = overlay_cache.get(&(is_old_style, identifier)) {
                     Ok(Some((cache.hash_of(resource)?, overlay)))
                 } else {
                     // The overlays are small, reused often, and loaded once, so throw them onto the heap with Box::leak() for caching
                     let overlay = Box::leak(Box::new(
                         ImageReader::open(cache.path_of(resource)?)?.with_guessed_format()?.decode()?.resize_exact(16, 16, FilterType::Lanczos3)
                     ));
-                    overlay_cache.insert(identifier, overlay);
+                    overlay_cache.insert((is_old_style, identifier), overlay);
                     Ok(Some((cache.hash_of(resource)?, overlay)))
                 }
             }
-            IconOverlay::Bytes { image: bytes, cachekey, identifier } => {
+            IconOverlay::Bytes { image: bytes, cachekey, identifier, is_old_style } => {
                 let mut overlay_cache = OVERLAY_CACHE.lock().expect("Unexpected panic in overlay loading");
 
-                if let Some(overlay) = overlay_cache.get(identifier) {
+                if let Some(overlay) = overlay_cache.get(&(is_old_style, identifier)) {
                     Ok(Some((cachekey, overlay)))
                 } else {
                     // The overlays are small, reused often, and loaded once, so throw them onto the heap with Box::leak() for caching
@@ -341,7 +343,7 @@ impl IconOverlay {
                         reader.set_format(ImageFormat::Png);
                         reader.decode()?.resize_exact(16, 16, FilterType::Lanczos3)
                     }));
-                    overlay_cache.insert(identifier, overlay);
+                    overlay_cache.insert((is_old_style, identifier), overlay);
                     Ok(Some((cachekey, overlay)))
                 }
             }
