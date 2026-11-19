@@ -114,15 +114,17 @@ fn do_main() -> Result<(), IconError> {
                 .long("no_purge")
                 .help("Do not purge icon cache folder")
                 .action(ArgAction::SetTrue),
-            Arg::new("image_format")
-                .long("image_format")
-                .help("Force image format (CAUTION: Non-native formats are not cached!)")
-                .value_parser(["native", #[cfg(feature = "webp")] "webp"]),
-            Arg::new("image_quality")
-                .long("image_quality")
-                .help("Set image quality for image_format flag")
-                .requires("image_format")
-                .value_parser(0i64..=100i64),
+            Arg::new("image_format_lossless")
+                .long("image_format_lossless")
+                .help("Set image format for lossless original files (CAUTION: Non-native formats are not cached!)")
+                .long_help("Set image format for lossless original files (CAUTION: Non-native formats are not cached!)\n".to_owned()+&IconImageFormat::help_text())
+                .value_name("FORMAT")
+                .value_parser(ValueParser::new(IconImageFormat::parse)),
+            Arg::new("image_format_lossy")
+                .long("image_format_lossy")
+                .help("(See image_format_lossless)")
+                .value_name("FORMAT")
+                .value_parser(ValueParser::new(IconImageFormat::parse)),
         ])
         .subcommand_required(true)
         .subcommands([
@@ -148,27 +150,6 @@ fn do_main() -> Result<(), IconError> {
                         .value_name("FILE")
                         .value_parser(ValueParser::path_buf())
                 ),
-            Command::new("web_dir")
-                .about("Prepare a directory for web hosting")
-                .args([
-                    Arg::new("out")
-                        .short('o')
-                        .long("out")
-                        .required(true)
-                        .help("Output directory")
-                        .value_name("OUTPUT DIRECTORY")
-                        .value_parser(ValueParser::path_buf()),
-                    Arg::new("copy_files")
-                        .long("copy_files")
-                        .help("Copy image files rather than creating symlinks")
-                        .conflicts_with("hardlink")
-                        .action(ArgAction::SetTrue),
-                    Arg::new("hardlink")
-                        .long("hardlink")
-                        .help("Use hard-links rather than soft-links")
-                        .conflicts_with("copy_files")
-                        .action(ArgAction::SetTrue)
-                ]),
             Command::new("utility_icons")
                 .about("Export set of utility icons or user-specified list of resources")
                 .args([
@@ -245,23 +226,6 @@ fn do_main() -> Result<(), IconError> {
                         .help("Output Image Export Collection")
                         .value_name("FILE")
                         .value_parser(ValueParser::path_buf()),
-                    Arg::new("web_dir")
-                        .long("web_dir")
-                        .help("Prepare a directory for web hosting")
-                        .value_name("OUTPUT DIRECTORY")
-                        .value_parser(ValueParser::path_buf()),
-                    Arg::new("copy_files")
-                        .long("copy_files")
-                        .help("(web_dir) Copy image files rather than creating symlinks")
-                        .conflicts_with("hardlink")
-                        .requires("web_dir")
-                        .action(ArgAction::SetTrue),
-                    Arg::new("hardlink")
-                        .long("hardlink")
-                        .help("(web_dir) Use hard-links rather than soft-links")
-                        .conflicts_with("copy_files")
-                        .requires("web_dir")
-                        .action(ArgAction::SetTrue),
                     Arg::new("utility_icons")
                         .long("utility_icons")
                         .help("Export set of utility icons or user-specified list of resources")
@@ -337,19 +301,6 @@ fn do_main() -> Result<(), IconError> {
     let output_mode = match command_name {
         "service_bundle" => vec![OutputMode::ServiceBundle { out: &command_args.get_one::<PathBuf>("out").expect("out is required") }],
         "iec" => vec![OutputMode::IEC { out: &command_args.get_one::<PathBuf>("out").expect("out is required") }],
-        "web_dir" => {
-            let out = &command_args.get_one::<PathBuf>("out").expect("out is required");
-            if !fs::exists(out)? {
-                fs::create_dir_all(out)?;
-            } else if fs::metadata(out)?.is_file() {
-                Err(std::io::Error::other(format!("Output must be a directory! ({})", out.to_string_lossy())))?;
-            }
-            vec![OutputMode::Web {
-                out,
-                copy_files: command_args.get_flag("copy_files"),
-                hard_link: command_args.get_flag("hardlink")
-            }]
-        },
         "utility_icons" => {
             let regexes = parse_utility_list(command_args.get_one::<PathBuf>("listfile"))?;
             vec![OutputMode::UtilityIcons { out: &command_args.get_one::<PathBuf>("out").expect("out is required"), regexes }]
@@ -372,14 +323,6 @@ fn do_main() -> Result<(), IconError> {
 
             if let Some(out) = command_args.get_one::<PathBuf>("iec") {
                 output_modes.push(OutputMode::IEC { out })
-            }
-
-            if let Some(out) = command_args.get_one::<PathBuf>("web_dir") {
-                output_modes.push(OutputMode::Web {
-                    out,
-                    copy_files: command_args.get_flag("copy_files"),
-                    hard_link: command_args.get_flag("hardlink")
-                })
             }
 
             if let Some(out) = command_args.get_one::<PathBuf>("utility_icons") {
@@ -460,15 +403,8 @@ fn do_main() -> Result<(), IconError> {
         use_old_overlays: arg_matches.get_flag("old_overlays"),
         module_overlays: arg_matches.get_flag("module_overlays"),
         clone_overlays: arg_matches.get_flag("clone_overlays"),
-        image_format: match arg_matches.get_one::<String>("image_format") {
-            None => IconImageFormat::Native,
-            Some(name) => match name.as_str() {
-                "native" => IconImageFormat::Native,
-                #[cfg(feature = "webp")]
-                "webp" => IconImageFormat::WEBP(arg_matches.get_one::<i64>("image_quality").map(|i| *i as u32)),    // clap enforces 0-100 range
-                _ => unreachable!("clap ensures image_format flag only passes valid values")
-            }
-        },
+        image_format_lossless: arg_matches.get_one::<IconImageFormat>("image_format_lossless").copied().unwrap_or(IconImageFormat::Native),
+        image_format_lossy: arg_matches.get_one::<IconImageFormat>("image_format_lossy").copied().unwrap_or(IconImageFormat::Native),
     };
 
     let start = Instant::now();
