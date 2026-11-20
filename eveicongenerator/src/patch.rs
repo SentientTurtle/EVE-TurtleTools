@@ -51,10 +51,12 @@ pub fn build_patch(from: &PathBuf, to: &PathBuf, out: &PathBuf) -> Result<(), Bo
 
     // Always include DELETED.txt, even if it's empty, so users will see that it exists even if the patch file they download has no deleted files
     out.start_file("DELETED.txt", FileOptions::<()>::default())?;
-    for idx in 0..from.len() {
-        let old_file = to.by_index(idx).expect("we iterate over len, so index access must be valid");
-        if !new_files.contains(old_file.name_raw()) {
-            writeln!(out, "{}", old_file.name()?)?;
+
+    for old_file in from.file_names_raw() {
+        if !new_files.contains(old_file) {
+            // The patch tool is for usage with our generated files, which always have ASCII/UTF-8 filenames
+            // When used on unsupported files, just raise an error and exit.
+            writeln!(out, "{}", str::from_utf8(old_file)?)?;
         }
     }
 
