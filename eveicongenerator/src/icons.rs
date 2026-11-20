@@ -1083,7 +1083,7 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                             let _ = fs::copy(cache.path_of(&*render_resource)?, icon_dir.join(index_key)).map_err(IconError::from)?;
                         }
 
-                        if icon_config.external_overlays {
+                        if icon_config.external_overlays && type_info.is_renderable {
                             let index_key = hash::index_key("png", ("downscale", cache.hash_of(&render_resource)?));
                             if !is_up_to_date(&old_index, &mut new_index, &index_key, force_rebuild) {
                                 ImageReader::open(&cache.path_of(&render_resource)?)?
