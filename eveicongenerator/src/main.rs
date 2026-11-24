@@ -7,7 +7,7 @@ use crate::icons::{IconBuildData, IconConfig, IconError, IconImageFormat, Output
 use crate::patch::build_patch;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use evesharedcache::cache::CacheDownloader;
+use evesharedcache::cache::{CacheDownloader, SharedCache};
 use evestaticdata::sde::SDE;
 use fs_err as fs;
 use std::io::Write;
@@ -416,13 +416,17 @@ fn do_main() -> Result<(), IconError> {
         &*user_agent
     )?;
     let cache_init_duration = start.elapsed();
+    if !silent_mode { println!("\tLoaded build:{}", cache.client_version()); }
+    if let Some(mut log) = log_file { writeln!(log, "\tLoaded build:{}", cache.client_version())?; }
 
     let data_load_start = Instant::now();
     if !silent_mode { println!("Loading SDE..."); }
     if let Some(mut log) = log_file { writeln!(log, "Loading SDE...")?; }
-    let mut sde = SDE::initialize(&user_agent)?.with_cache("./cache/sde");
+    let mut sde = SDE::initialize_for_tenant(&user_agent, "tranquility", Some(cache.client_version()))?.with_cache("./cache/sde");
     let icon_build_data = IconBuildData::load(&mut sde, icon_config)?;
     let data_load_duration = data_load_start.elapsed();
+    if !silent_mode { println!("\tLoaded version:{} build:{}", sde.info().release, sde.info().buildNumber); }
+    if let Some(mut log) = log_file { writeln!(log, "\tLoaded version:{} build:{}", sde.info().release, sde.info().buildNumber)?; }
 
     let build_start = Instant::now();
     icons::build_icon_export(

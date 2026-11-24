@@ -20,6 +20,7 @@ use std::fs::File;
 use std::{fs, io};
 use std::io::{BufRead, BufReader, ErrorKind, Seek, SeekFrom};
 use std::path::PathBuf;
+use std::str::FromStr;
 use util::units::EVEUnit;
 
 pub mod types;
@@ -110,7 +111,7 @@ impl SDE {
         Ok(SDE { client, info, cache: None })
     }
 
-    pub fn initialize_for_tenant(user_agent: &str, tenant: &str) -> Result<Self, SDEError> {
+    pub fn initialize_for_tenant(user_agent: &str, tenant: &str, preferred_build: Option<&str>) -> Result<Self, SDEError> {
         if user_agent.len() == 0 { return Err(SDEError::IO(io::Error::other("A useragent identifying the application must be set in SDE::initialize()"))) };
 
         #[derive(Debug, Deserialize)]
@@ -121,8 +122,15 @@ impl SDE {
             tenantUrl: String
         }
         #[derive(Debug, Deserialize)]
+        struct SingleRelease {
+            #[allow(unused)]
+            release: String,
+            releaseUrl: String
+        }
+        #[derive(Debug, Deserialize)]
         struct Releases {
-            latestUrl: String
+            latestUrl: String,
+            releases: Vec<SingleRelease>
         }
 
         let client = reqwest::blocking::Client::builder()
@@ -137,10 +145,28 @@ impl SDE {
                 let releases = client.get(tenant_info.tenantUrl).send().map_err(io::Error::other)?
                     .json::<Releases>().map_err(io::Error::other)?;
 
-                let info = client.get(releases.latestUrl).send().map_err(io::Error::other)?
-                    .json::<SDEInfo>().map_err(io::Error::other)?;
+                let mut info = None;
+                if let Some(preferred_build) = preferred_build.and_then(|b| u64::from_str(b).ok()) {
+                    for release in releases.releases {
+                        let release_info = client.get(release.releaseUrl).send().map_err(io::Error::other)?
+                            .json::<SDEInfo>().map_err(io::Error::other)?;
+                        if release_info.buildNumber == preferred_build {
+                            info = Some(release_info);
+                            break
+                        }
+                    }
+                }
 
-                return Ok(SDE { client, info, cache: None })
+                let info = if let Some(info) = info {
+                    info
+                } else {
+                    client.get(releases.latestUrl).send().map_err(io::Error::other)?.json::<SDEInfo>().map_err(io::Error::other)?
+                };
+                return Ok(SDE {
+                    client,
+                    cache: None,
+                    info
+                })
             }
         }
         Err(SDEError::TenantNotFound(tenant.to_owned()))
