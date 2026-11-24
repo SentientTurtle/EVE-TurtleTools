@@ -1,5 +1,0 @@
-ZIP file repacker webservice for EVE Online Static Data Export
-
-Quick proof of concept, please use the following libraries directly:
-* https://github.com/SentientTurtle/ZipSlash
-* https://github.com/SentientTurtle/EVE-3rd-party-dev-tools
