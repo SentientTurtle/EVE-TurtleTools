@@ -24,7 +24,7 @@ jobs:
           if [ -n "${{ github.event.inputs.build-number }}" ]; then
             BUILD_NUMBER=${{ github.event.inputs.build-number }}
           else
-            BUILD_NUMBER=$(curl -s https://developers.eveonline.com/static-data/tranquility/latest.jsonl | jq -r '.buildNumber')
+            BUILD_NUMBER=$(curl -s https://binaries.eveonline.com/eveclient_TQ.json | jq -r '.buildNumber')
           fi
           
           echo "Build number: ${BUILD_NUMBER}"
