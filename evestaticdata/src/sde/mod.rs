@@ -1,9 +1,5 @@
 #![allow(non_snake_case)]
 
-#[allow(non_snake_case)]
-#[cfg(all(feature="export_sqlite", feature="sde"))]
-pub mod sqlite;
-
 #[cfg(feature = "npc_data")]
 pub mod npc;
 

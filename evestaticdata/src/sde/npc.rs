@@ -5,7 +5,8 @@ use std::error::Error;
 use std::io::Write;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use crate::sde::load::{SDELoader, TypeDogma};
+use crate::sde::types::{TypeDogma};
+use crate::sde::SDE;
 use crate::types::ids;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -640,24 +641,24 @@ const KNOWN_ATTRIBUTES: &[ids::AttributeID] = &[
     2816, 2818, 2819, 2822, 2827, 3036, 3037, 3039, 3176, 5206, 5602, 5657, 5658, 5659, 5660, 5970, 5971, 5972, 6184, 6185, 6186, 6271, 6363
 ];
 
-pub fn build_npc_data<W: Write>(loader: &mut SDELoader, out: &mut W) -> Result<(Vec<ids::AttributeID>, Vec<ids::EffectID>), Box<dyn Error>> {
-    let attribute_info = loader.load_dogma_attributes_map()?;
-    let effect_info = loader.load_dogma_effects_map()?;
+pub fn build_npc_data<W: Write>(loader: &mut SDE, out: &mut W) -> Result<(Vec<ids::AttributeID>, Vec<ids::EffectID>), Box<dyn Error>> {
+    let attribute_info = loader.collected().dogmaAttributes()?;
+    let effect_info = loader.collected().dogmaEffects()?;
     let mut npc_groups = Vec::new();
     let mut group_names = IndexMap::new();
-    for group in loader.load_groups()? {
+    for group in loader.stream().groups()? {
         let group = group?;
         if group.categoryID == 11 {
             npc_groups.push(group.groupID);
         }
         group_names.insert(group.groupID, group.name.en);
     }
-    let type_dogma = loader.load_type_dogma_map()?;
+    let type_dogma = loader.collected().typeDogma()?;
 
     let mut attributes: HashSet<ids::AttributeID> = HashSet::new();
     let mut effects: Vec<ids::EffectID> = Vec::new();
 
-    for inv_type in loader.load_types()? {
+    for inv_type in loader.stream().types()? {
         let inv_type = inv_type?;
         if !npc_groups.contains(&inv_type.groupID) { continue; }
 
