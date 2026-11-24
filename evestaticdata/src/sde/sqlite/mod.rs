@@ -7,13 +7,13 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek};
 use rusqlite::types::Null;
-use crate::sde::load::{LocalizedString, ResourcePurpose, SDELoadError, SDELoader, Type, TypeMaterial};
+use crate::sde::load::{LocalizedString, ResourcePurpose, SDEError, SDELoader, Type, TypeMaterial};
 use crate::types::ids;
 use crate::util::units::EVEUnit;
 
 #[derive(Debug)]
 pub enum ExportError {
-    SDELoad(SDELoadError),
+    SDELoad(SDEError),
     SQLite(rusqlite::Error)
 }
 
@@ -27,8 +27,8 @@ impl Display for ExportError {
 }
 impl Error for ExportError {}
 
-impl From<SDELoadError> for ExportError {
-    fn from(value: SDELoadError) -> Self {
+impl From<SDEError> for ExportError {
+    fn from(value: SDEError) -> Self {
         ExportError::SDELoad(value)
     }
 }
@@ -838,7 +838,7 @@ pub fn export_effects<R: Read + Seek>(sde: &mut SDELoader<R>, db: &mut rusqlite:
                 let mut buf = String::new();
                 buf.push('[');
                 for modifierinfo in effect.modifierInfo {
-                    buf.push_str(&serde_json::to_string(&modifierinfo).map_err(|_| SDELoadError::IntegrityError("Modifierinfo serialization should always succeed".to_owned()))?);
+                    buf.push_str(&serde_json::to_string(&modifierinfo).map_err(|_| SDEError::IntegrityError("Modifierinfo serialization should always succeed".to_owned()))?);
                     buf.push(',');
                 }
                 buf.truncate(buf.len() - 1);
@@ -2016,7 +2016,7 @@ pub fn export_map_full<R: Read + Seek>(sde: &mut SDELoader<R>, db: &mut rusqlite
     for res in sde.load_stars()? {
         let star = res?;
 
-        celestial_names.insert(star.starID, system_map.get(&star.solarSystemID).ok_or_else(|| SDELoadError::IntegrityError(format!("Star in unknown solarsystem: #{}", star.solarSystemID)))?.name.clone());
+        celestial_names.insert(star.starID, system_map.get(&star.solarSystemID).ok_or_else(|| SDEError::IntegrityError(format!("Star in unknown solarsystem: #{}", star.solarSystemID)))?.name.clone());
 
         modified += st_statistics.execute(rusqlite::params![
             star.starID,
@@ -2071,13 +2071,13 @@ pub fn export_map_full<R: Read + Seek>(sde: &mut SDELoader<R>, db: &mut rusqlite
         let planet = res?;
 
         debug_assert!(planet.celestialIndex < 40, "Roman numeral logic is only correct up to 39");
-        let parent_system = system_map.get(&planet.solarSystemID).ok_or_else(|| SDELoadError::IntegrityError(format!("Planet with unknown solarsystem: #{} in #{}", planet.planetID, planet.solarSystemID)))?;
-        let name = planet.name(|system_id| system_map.get(&system_id).map(|sys| &sys.name).ok_or_else(|| SDELoadError::IntegrityError(format!("Planet in unknown solarsystem: #{}", system_id))))?;
+        let parent_system = system_map.get(&planet.solarSystemID).ok_or_else(|| SDEError::IntegrityError(format!("Planet with unknown solarsystem: #{} in #{}", planet.planetID, planet.solarSystemID)))?;
+        let name = planet.name(|system_id| system_map.get(&system_id).map(|sys| &sys.name).ok_or_else(|| SDEError::IntegrityError(format!("Planet in unknown solarsystem: #{}", system_id))))?;
 
         modified += st_denormalize.execute(rusqlite::params![
             planet.planetID,
             planet.typeID,
-            type_groups.get(&planet.typeID).ok_or_else(|| SDELoadError::IntegrityError(format!("Unknown planet typeID: #{}", planet.typeID)))?,
+            type_groups.get(&planet.typeID).ok_or_else(|| SDEError::IntegrityError(format!("Unknown planet typeID: #{}", planet.typeID)))?,
             parent_system.solarSystemID,
             parent_system.constellationID,
             parent_system.regionID,
@@ -2155,13 +2155,13 @@ pub fn export_map_full<R: Read + Seek>(sde: &mut SDELoader<R>, db: &mut rusqlite
     for res in sde.load_moons()? {
         let moon = res?;
 
-        let parent_system = system_map.get(&moon.solarSystemID).ok_or_else(|| SDELoadError::IntegrityError(format!("Moon with unknown solarsystem: #{} in #{}", moon.moonID, moon.solarSystemID)))?;
-        let name = moon.name(|id| celestial_names.get(&id).ok_or_else(|| SDELoadError::IntegrityError(format!("Unknown planet: #{}", id))))?;
+        let parent_system = system_map.get(&moon.solarSystemID).ok_or_else(|| SDEError::IntegrityError(format!("Moon with unknown solarsystem: #{} in #{}", moon.moonID, moon.solarSystemID)))?;
+        let name = moon.name(|id| celestial_names.get(&id).ok_or_else(|| SDEError::IntegrityError(format!("Unknown planet: #{}", id))))?;
 
         modified += st_denormalize.execute(rusqlite::params![
             moon.moonID,
             moon.typeID,
-            type_groups.get(&moon.typeID).ok_or_else(|| SDELoadError::IntegrityError(format!("Unknown moon typeID: #{}", moon.typeID)))?,
+            type_groups.get(&moon.typeID).ok_or_else(|| SDEError::IntegrityError(format!("Unknown moon typeID: #{}", moon.typeID)))?,
             moon.solarSystemID,
             parent_system.constellationID,
             parent_system.regionID,
@@ -2226,8 +2226,8 @@ pub fn export_map_full<R: Read + Seek>(sde: &mut SDELoader<R>, db: &mut rusqlite
     for res in sde.load_stargates()? {
         let stargate = res?;
 
-        let from_system = system_map.get(&stargate.solarSystemID).ok_or_else(|| SDELoadError::IntegrityError(format!("Stargate with unknown solarsystem: #{} in #{}", stargate.stargateID, stargate.solarSystemID)))?;
-        let to_system = system_map.get(&stargate.destination.solarSystemID).ok_or_else(|| SDELoadError::IntegrityError(format!("Stargate with unknown destination solarsystem: #{} in #{}", stargate.stargateID, stargate.destination.solarSystemID)))?;
+        let from_system = system_map.get(&stargate.solarSystemID).ok_or_else(|| SDEError::IntegrityError(format!("Stargate with unknown solarsystem: #{} in #{}", stargate.stargateID, stargate.solarSystemID)))?;
+        let to_system = system_map.get(&stargate.destination.solarSystemID).ok_or_else(|| SDEError::IntegrityError(format!("Stargate with unknown destination solarsystem: #{} in #{}", stargate.stargateID, stargate.destination.solarSystemID)))?;
 
         modified += st_jumps.execute((stargate.stargateID, stargate.destination.stargateID))?;
 
@@ -2244,7 +2244,7 @@ pub fn export_map_full<R: Read + Seek>(sde: &mut SDELoader<R>, db: &mut rusqlite
         modified += st_denormalize.execute(rusqlite::params![
             stargate.stargateID,
             stargate.typeID,
-            type_groups.get(&stargate.typeID).ok_or_else(|| SDELoadError::IntegrityError(format!("Unknown stargate typeID: #{}", stargate.typeID)))?,
+            type_groups.get(&stargate.typeID).ok_or_else(|| SDEError::IntegrityError(format!("Unknown stargate typeID: #{}", stargate.typeID)))?,
             stargate.solarSystemID,
             from_system.constellationID,
             from_system.regionID,
@@ -2253,7 +2253,7 @@ pub fn export_map_full<R: Read + Seek>(sde: &mut SDELoader<R>, db: &mut rusqlite
             stargate.position.y,
             stargate.position.z,
             Null,   // radius
-            stargate.name(|id| system_map.get(&id).map(|s| &s.name).ok_or_else(|| SDELoadError::IntegrityError(format!("Stargate in unknown solarsystem: #{}", id))))?.en,
+            stargate.name(|id| system_map.get(&id).map(|s| &s.name).ok_or_else(|| SDEError::IntegrityError(format!("Stargate in unknown solarsystem: #{}", id))))?.en,
             from_system.securityStatus,
             Null,   // celestialIndex
             Null,   // orbitIndex
@@ -2304,11 +2304,11 @@ pub fn export_map_full<R: Read + Seek>(sde: &mut SDELoader<R>, db: &mut rusqlite
     for res in sde.load_npc_stations()? {
         let station = res?;
 
-        let parent_system = system_map.get(&station.solarSystemID).ok_or_else(|| SDELoadError::IntegrityError(format!("Station with unknown solarsystem: #{} in #{}", station.stationID, station.solarSystemID)))?;
+        let parent_system = system_map.get(&station.solarSystemID).ok_or_else(|| SDEError::IntegrityError(format!("Station with unknown solarsystem: #{} in #{}", station.stationID, station.solarSystemID)))?;
         let name = station.name(
-            |id| celestial_names.get(&id).ok_or_else(|| SDELoadError::IntegrityError(format!("Unknown celestial: #{}", id))),
-            |id| operation_names.get(&id).ok_or_else(|| SDELoadError::IntegrityError(format!("Unknown station operation: #{}", id))),
-            |id| corporation_names.get(&id).ok_or_else(|| SDELoadError::IntegrityError(format!("Unknown corporation: #{}", id)))
+            |id| celestial_names.get(&id).ok_or_else(|| SDEError::IntegrityError(format!("Unknown celestial: #{}", id))),
+            |id| operation_names.get(&id).ok_or_else(|| SDEError::IntegrityError(format!("Unknown station operation: #{}", id))),
+            |id| corporation_names.get(&id).ok_or_else(|| SDEError::IntegrityError(format!("Unknown corporation: #{}", id)))
         )?;
 
         modified += st_stations.execute(rusqlite::params![
@@ -2332,7 +2332,7 @@ pub fn export_map_full<R: Read + Seek>(sde: &mut SDELoader<R>, db: &mut rusqlite
         modified += st_denormalize.execute(rusqlite::params![
             station.stationID,
             station.typeID,
-            type_groups.get(&station.typeID).ok_or_else(|| SDELoadError::IntegrityError(format!("Unknown station typeID: #{}", station.typeID)))?,
+            type_groups.get(&station.typeID).ok_or_else(|| SDEError::IntegrityError(format!("Unknown station typeID: #{}", station.typeID)))?,
             station.solarSystemID,
             parent_system.constellationID,
             parent_system.regionID,

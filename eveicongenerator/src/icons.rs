@@ -1,5 +1,5 @@
 use evesharedcache::cache::{CacheError, SharedCache};
-use evestaticdata::sde::load::{SDELoadError, SDELoader, TypeList};
+use evestaticdata::sde::{SDE, SDEError, types::TypeList};
 use evestaticdata::types::{ids, values};
 use image::imageops::FilterType;
 use image::{imageops, DynamicImage, GrayAlphaImage, ImageFormat, ImageReader, LumaA};
@@ -490,7 +490,7 @@ pub fn get_cloneoverlay(requires_omega: Option<bool>, use_old_style: bool) -> Ic
 #[derive(Debug)]
 pub enum IconError {
     Cache(CacheError),
-    SDE(SDELoadError),
+    SDE(SDEError),
     IO(io::Error),
     Image(image::ImageError),
     String(String)
@@ -538,8 +538,8 @@ impl From<image::ImageError> for IconError {
     }
 }
 
-impl From<SDELoadError> for IconError {
-    fn from(value: SDELoadError) -> Self {
+impl From<SDEError> for IconError {
+    fn from(value: SDEError) -> Self {
         IconError::SDE(value)
     }
 }
@@ -561,28 +561,28 @@ pub struct IconBuildData {
 }
 
 impl IconBuildData {
-    pub fn load(mut loader: SDELoader, icon_config: IconConfig) -> Result<IconBuildData, SDELoadError> {
-        let group_categories = { loader.load_groups()?.map(|g_res| g_res.map(|g| (g.groupID, g.categoryID))).collect::<Result<HashMap<_, _>, _>>()? };
+    pub fn load(mut loader: &mut SDE, icon_config: IconConfig) -> Result<IconBuildData, SDEError> {
+        let group_categories = { loader.stream().groups()?.map(|g_res| g_res.map(|g| (g.groupID, g.categoryID))).collect::<Result<HashMap<_, _>, _>>()? };
 
         Ok(Self {
             types: {
-                fn load_renderable_types(loader: &mut SDELoader) -> Result<TypeList, SDELoadError> {
-                    for res in loader.load_type_lists()? {
+                fn load_renderable_types(loader: &mut SDE) -> Result<TypeList, SDEError> {
+                    for res in loader.stream().typeLists()? {
                         let type_list = res?;
                         if type_list.typeListID == 140 {
                             return Ok(type_list);
                         }
                     }
-                    Err(SDELoadError::IntegrityError(format!("Could not find typelist #140: RenderableTypeIDs in Static Data Export {}", loader.version())))
+                    Err(SDEError::IntegrityError(format!("Could not find typelist #140: RenderableTypeIDs in Static Data Export {}", loader.info().release)))
                 }
 
                 let renderable_types = load_renderable_types(&mut loader)?;
 
                 let mut type_metagroups = HashMap::<ids::TypeID, ids::MetaGroupID>::new();
                 let mut types = HashMap::<ids::TypeID, TypeInfo>::new();
-                for item_type in loader.load_types()? {
+                for item_type in loader.stream().types()? {
                     let item_type = item_type?;
-                    let item_category = *group_categories.get(&item_type.groupID).ok_or_else(|| SDELoadError::IntegrityError(format!("Type without associated category? Type:{} Group:{}", item_type.typeID, item_type.groupID)))?;
+                    let item_category = *group_categories.get(&item_type.groupID).ok_or_else(|| SDEError::IntegrityError(format!("Type without associated category? Type:{} Group:{}", item_type.typeID, item_type.groupID)))?;
                     if let Some(metagroup) = item_type.metaGroupID {
                         type_metagroups.insert(item_type.typeID, metagroup);
                     }
@@ -602,7 +602,7 @@ impl IconBuildData {
                     }
                 }
 
-                for blueprint in loader.load_blueprints()? {
+                for blueprint in loader.stream().blueprints()? {
                     let blueprint = blueprint?;
 
                     if let Some(manufacturing) = blueprint.activities.manufacturing {
@@ -623,7 +623,7 @@ impl IconBuildData {
                 if icon_config.clone_overlays || icon_config.module_overlays || icon_config.external_overlays {
                     let mut alpha_skills = HashMap::<ids::TypeID, values::SkillLevel>::new();
                     if icon_config.clone_overlays || icon_config.external_overlays {
-                        for clone_grade in loader.load_clone_grades()? {
+                        for clone_grade in loader.stream().cloneGrades()? {
                             let clone_grade = clone_grade?;
                             alpha_skills.extend(clone_grade.skills);
                             break;  // All alpha clone grades are the same, skip after the first
@@ -636,7 +636,7 @@ impl IconBuildData {
                         }
                     }
 
-                    for type_dogma in loader.load_type_dogma()? {
+                    for type_dogma in loader.stream().typeDogma()? {
                         let type_dogma = type_dogma?;
                         if let Some(item_type) = types.get_mut(&type_dogma.typeID) {
 
@@ -677,19 +677,19 @@ impl IconBuildData {
 
                 types
             },
-            icon_files: { loader.load_icons()?.map(|i_res| i_res.map(|i| (i.iconID, i.iconFile))).collect::<Result<HashMap<_, _>, _>>()? },
+            icon_files: { loader.stream().icons()?.map(|i_res| i_res.map(|i| (i.iconID, i.iconFile))).collect::<Result<HashMap<_, _>, _>>()? },
             graphics_folders: {
-                loader.load_graphics()?.map(|g_res| {
+                loader.stream().graphics()?.map(|g_res| {
                     match g_res {
                         Ok(graphic) => Ok((graphic.graphicID, GraphicInfo { folder: graphic.iconFolder, hull: graphic.sofHullName })),
                         Err(err) => Err(err)
                     }
                 })
-                    .collect::<Result<HashMap<u32, GraphicInfo>, SDELoadError>>()?
+                    .collect::<Result<HashMap<u32, GraphicInfo>, SDEError>>()?
             },
             skin_materials: {
-                let license_skins = loader.load_skin_licenses()?.map(|l_res| l_res.map(|l| (l.typeID, l.skinID))).collect::<Result<HashMap<_, _>, _>>()?;
-                let skin_materials = loader.load_skins()?.map(|s_res| s_res.map(|s| (s.skinID, s.skinMaterialID))).collect::<Result<HashMap<_, _>, _>>()?;
+                let license_skins = loader.stream().skinLicenses()?.map(|l_res| l_res.map(|l| (l.licenseTypeID, l.skinID))).collect::<Result<HashMap<_, _>, _>>()?;
+                let skin_materials = loader.stream().skins()?.map(|s_res| s_res.map(|s| (s.skinID, s.skinMaterialID))).collect::<Result<HashMap<_, _>, _>>()?;
 
                 let mut license_materials = HashMap::with_capacity(license_skins.len());
                 for (license_id, skin_id) in license_skins {
@@ -867,10 +867,7 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                     let icon_resource_bpc = format!("{}/{}_64_bpc.png", folder.trim_end_matches('/'), type_info.graphic_id.unwrap());
 
                     if cache.has_resource(&*icon_resource_bp) {
-                        let overlay_metagroup = ids::MetaGroupID::max(
-                            type_info.meta_group_id.unwrap_or(1),
-                            type_info.blueprint_output_metagroup.unwrap_or(1)
-                        );
+                        let overlay_metagroup = type_info.blueprint_output_metagroup.or(type_info.meta_group_id).unwrap_or(1);
 
                         let mut techoverlay = get_techoverlay(overlay_metagroup, icon_config.use_old_overlays);
                         if let Some(overlay_identifier) = techoverlay.identifier() { overlay_metadata.entry(*type_id).or_default().insert(overlay_identifier); };
@@ -954,7 +951,9 @@ pub fn build_icon_export<C: SharedCache, P: AsRef<Path>>(icon_config: IconConfig
                 } else if let Some(icon) = type_info.icon_id { // If no graphics icon, try icon
                     let icon_resource = &*data.icon_files.get(&icon).ok_or(IconError::String(format!("unknown icon id: {}", icon)))?;
                     if cache.has_resource(&icon_resource) {
-                        let techoverlay = get_techoverlay(type_info.meta_group_id.unwrap_or(1), icon_config.use_old_overlays);
+                        let overlay_metagroup = type_info.blueprint_output_metagroup.or(type_info.meta_group_id).unwrap_or(1);
+
+                        let techoverlay = get_techoverlay(overlay_metagroup, icon_config.use_old_overlays);
                         if let Some(overlay_identifier) = techoverlay.identifier() { overlay_metadata.entry(*type_id).or_default().insert(overlay_identifier); };
                         let (techoverlay_cache, techoverlay_image) = techoverlay.retain_if(!icon_config.external_overlays).load(cache)?.unzip();
 

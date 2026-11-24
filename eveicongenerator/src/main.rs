@@ -8,7 +8,7 @@ use crate::patch::build_patch;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use evesharedcache::cache::CacheDownloader;
-use evestaticdata::sde::load::SDELoader;
+use evestaticdata::sde::SDE;
 use fs_err as fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -389,9 +389,9 @@ fn do_main() -> Result<(), IconError> {
 
     use std::fmt::Write;    // Write into string
     if let Some(hash) = GIT_HASH {
-        write!(&mut user_agent, " turtletools:{}/{}-{} +{}", CRATE_NAME, CRATE_VERSION, hash, CRATE_REPO).expect("write into string should not fail!");
+        write!(&mut user_agent, " (turtletools:{}/{}-{})", CRATE_NAME, CRATE_VERSION, hash).expect("write into string should not fail!");
     } else {
-        write!(&mut user_agent, " turtletools:{}/{} +{}", CRATE_NAME, CRATE_VERSION, CRATE_REPO).expect("write into string should not fail!");
+        write!(&mut user_agent, " (turtletools:{}/{})", CRATE_NAME, CRATE_VERSION).expect("write into string should not fail!");
     }
 
     let silent_mode = arg_matches.get_flag("silent"); // icons::build_icon_export overrides this to `true` if "checksum to stdout" is present
@@ -420,7 +420,8 @@ fn do_main() -> Result<(), IconError> {
     let data_load_start = Instant::now();
     if !silent_mode { println!("Loading SDE..."); }
     if let Some(mut log) = log_file { writeln!(log, "Loading SDE...")?; }
-    let icon_build_data = IconBuildData::load(SDELoader::open_latest("./cache/sde.zip")?, icon_config)?;
+    let mut sde = SDE::initialize(&user_agent)?.with_cache("./cache/sde");
+    let icon_build_data = IconBuildData::load(&mut sde, icon_config)?;
     let data_load_duration = data_load_start.elapsed();
 
     let build_start = Instant::now();
@@ -457,7 +458,14 @@ fn do_main() -> Result<(), IconError> {
     }
 
     // Delete unnecessary cache files to avoid a storage "leak"
-    cache.purge(&["sde.zip", "checksum.txt"])?;
+    let mut keep_files = vec!["checksum.txt"];
+    keep_files.reserve(sde.info().tables.len());
+
+    for (_, table) in &sde.info().tables {
+        keep_files.push(format!("sde/{}.jsonl", table.version).leak());
+    }
+
+    cache.purge(&keep_files)?;
 
     Ok(())
 }

@@ -58,6 +58,7 @@ pub mod ids {
     pub type IndustryFilterID = u32;
     pub type NotificationTypeID = u32;
     pub type CareerPathID = u32;
+    pub type SkillPlanID = u32;
 
     // ItemIDs
     pub type ItemID = u32;
@@ -81,9 +82,9 @@ pub mod uuids {
 
     #[allow(non_camel_case_types)]
     #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-    #[cfg_attr(feature="sde_load", derive(serde::Deserialize))]
+    #[cfg_attr(feature="sde", derive(serde::Deserialize))]
     pub struct EVE_UUID(
-        #[cfg_attr(feature="sde_load", serde(with = "uuid::serde::hyphenated"))]
+        #[cfg_attr(feature="sde", serde(with = "uuid::serde::hyphenated"))]
         pub Uuid
     );
 

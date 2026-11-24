@@ -11,7 +11,7 @@ webp = ["dep:webp"]
 
 [dependencies]
 evesharedcache = { path = "../evesharedcache" }
-evestaticdata = { path = "../evestaticdata", features = ["sde_update", "sde_load"] }
+evestaticdata = { path = "../evestaticdata", features = ["sde", "sde"] }
 zip = "9.5.1"
 image = "0.25.10"
 image-blend = "0.1.7"

@@ -48,9 +48,9 @@ impl<'a> RefList<'a> {
         self.includes_type(type_id, group_id, category_id)
     }
 
-    #[cfg(feature = "sde_load")]
-    pub fn to_typelist(self) -> crate::sde::load::TypeList {
-        crate::sde::load::TypeList {
+    #[cfg(feature = "sde")]
+    pub fn to_typelist(self) -> crate::sde::types::TypeList {
+        crate::sde::types::TypeList {
             typeListID: 0,
             displayName: None,
             displayDescription: None,

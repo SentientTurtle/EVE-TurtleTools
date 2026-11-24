@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::{Duration};
 use md5::{Digest, Md5};
 use serde::Deserialize;
 
@@ -384,8 +384,6 @@ impl CacheDownloader {
     pub fn validate(&self) -> Result<(usize, usize), CacheError> {
         let mut valid = 0usize;
         let mut invalid = 0usize;
-
-        let start = Instant::now();
         let path_map = self.res_index.values().chain(self.app_index.values()).map(|entry| (entry.path.as_str(), entry)).collect::<HashMap<&str, &IndexEntry>>();
 
         for dir in self.cache_dir.read_dir()? {
@@ -430,7 +428,6 @@ impl CacheDownloader {
                 }
             }
         }
-        println!("loop: {}", start.elapsed().as_secs_f64());
 
         Ok((valid, invalid))
     }
@@ -441,10 +438,11 @@ impl CacheDownloader {
     ///
     /// WARNING: Deletes files in the directory this instance of [`CacheDownloader`] has been initialized to, including any not created by this tool
     pub fn purge(&self, keep_files: &[&str]) -> Result<(), io::Error> {
-        let valid_paths = self.res_index.values()
+        let mut valid_paths = self.res_index.values()
             .chain(self.app_index.values())
             .map(|entry| &*entry.path)
             .collect::<HashSet<&str>>();
+        valid_paths.extend(keep_files);
 
         let client_index = format!("eveonline_{}.txt", self.client_version);
 
@@ -456,14 +454,13 @@ impl CacheDownloader {
             if parent_entry.file_type()?.is_dir() {
                 for file_entry in fs::read_dir(parent_entry.path())? {
                     let file_entry = file_entry?;
-                    let file_path = format!("{}/{}", parent_name, &file_entry.file_name().to_str().unwrap());
-
+                    let file_path = format!("{}/{}", parent_name, &file_entry.file_name().to_str().unwrap()).to_ascii_lowercase();
                     if !valid_paths.contains(&*file_path.to_ascii_lowercase()) {
                         fs::remove_file(file_entry.path())?;
                     }
                 }
             } else {
-                if parent_name != client_index && !keep_files.contains(&parent_name) {
+                if parent_name != client_index && !valid_paths.contains(&parent_name) {
                     fs::remove_file(parent_entry.path())?;
                 }
             }
